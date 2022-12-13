@@ -5,10 +5,9 @@ use nom::{
     bytes::complete::tag,
     character::complete::{i64 as nom_i64, line_ending, space0},
     combinator::all_consuming,
-    error::VerboseError,
     multi::{separated_list0, separated_list1},
     sequence::{delimited, separated_pair, tuple},
-    Parser,
+    IResult, Parser,
 };
 
 pub fn solution(input: &str) -> String {
@@ -51,8 +50,6 @@ fn parse(input: &str) -> Vec<(Packet, Packet)> {
     all_consuming(p_pairs)(input).expect("valid input").1
 }
 
-type IResult<I, O> = nom::IResult<I, O, VerboseError<I>>;
-
 fn p_pairs(input: &str) -> IResult<&str, Vec<(Packet, Packet)>> {
     separated_list1(tuple((line_ending, line_ending)), p_pair)(input)
 }
@@ -89,8 +86,8 @@ fn part_two(pairs: &[(Packet, Packet)]) -> usize {
 
     packets.sort_unstable();
 
-    let fst_index = packets.iter().position(|p| p == &&fst).unwrap();
-    let snd_index = packets.iter().position(|p| p == &&snd).unwrap();
+    let fst_index = packets.binary_search(&&fst).unwrap();
+    let snd_index = packets.binary_search(&&snd).unwrap();
     (fst_index + 1) * (snd_index + 1)
 }
 
