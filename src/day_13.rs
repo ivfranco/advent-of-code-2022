@@ -3,10 +3,12 @@ use std::cmp::Ordering;
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{digit1, line_ending},
+    character::complete::{i64 as nom_i64, line_ending, space0},
+    combinator::all_consuming,
+    error::VerboseError,
     multi::{separated_list0, separated_list1},
     sequence::{delimited, separated_pair, tuple},
-    IResult, Parser,
+    Parser,
 };
 
 pub fn solution(input: &str) -> String {
@@ -46,22 +48,28 @@ impl Ord for Packet {
 }
 
 fn parse(input: &str) -> Vec<(Packet, Packet)> {
-    let (remain, pairs) = p_pairs(input).expect("valid input");
-    assert!(remain.is_empty(), "incomplete parse: {remain}");
-    pairs
+    all_consuming(p_pairs)(input).expect("valid input").1
 }
 
+type IResult<I, O> = nom::IResult<I, O, VerboseError<I>>;
+
 fn p_pairs(input: &str) -> IResult<&str, Vec<(Packet, Packet)>> {
-    separated_list1(
-        tuple((line_ending, line_ending)),
-        separated_pair(p_packet, line_ending, p_packet),
-    )(input)
+    separated_list1(tuple((line_ending, line_ending)), p_pair)(input)
+}
+
+fn p_pair(input: &str) -> IResult<&str, (Packet, Packet)> {
+    separated_pair(p_packet, line_ending, p_packet)(input)
 }
 
 fn p_packet(input: &str) -> IResult<&str, Packet> {
     alt((
-        delimited(tag("["), separated_list0(tag(","), p_packet), tag("]")).map(Packet::List),
-        digit1.map(|digits: &str| Packet::Int(digits.parse().expect("integer overflow"))),
+        delimited(
+            tag("["),
+            separated_list0(tag(",").and(space0), p_packet),
+            tag("]"),
+        )
+        .map(Packet::List),
+        nom_i64.map(Packet::Int),
     ))(input)
 }
 
@@ -79,7 +87,7 @@ fn part_two(pairs: &[(Packet, Packet)]) -> usize {
     let snd = p_packet("[[6]]").unwrap().1;
     packets.extend([&fst, &snd]);
 
-    packets.sort();
+    packets.sort_unstable();
 
     let fst_index = packets.iter().position(|p| p == &&fst).unwrap();
     let snd_index = packets.iter().position(|p| p == &&snd).unwrap();

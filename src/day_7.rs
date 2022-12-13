@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
 use nom::{
+    branch::alt,
     bytes::complete::{tag, take_while},
-    character::complete::{newline, space1},
+    character::complete::{newline, space1, u64},
     multi::{separated_list0, separated_list1},
+    sequence::{preceded, separated_pair},
     IResult, Parser,
 };
 
@@ -25,7 +27,7 @@ enum CdPath<'a> {
 
 #[derive(Debug)]
 enum LsEntry<'a> {
-    File(&'a str, u64),
+    File(u64, &'a str),
     Dir(&'a str),
 }
 
@@ -73,7 +75,7 @@ fn dir_sizes<'a>(command_and_result: &'a [CommandAndResult]) -> HashMap<FSPath<'
                 let files = entries
                     .iter()
                     .filter_map(|entry| {
-                        if let LsEntry::File(name, size) = entry {
+                        if let LsEntry::File(size, name) = entry {
                             Some((*name, *size))
                         } else {
                             None
@@ -139,24 +141,10 @@ fn p_input(input: &str) -> IResult<&str, Vec<CommandAndResult>> {
 }
 
 fn p_command_and_result(input: &str) -> IResult<&str, CommandAndResult> {
-    let (input, _) = tag("$ ")(input)?;
-    let (input, command) = tag("cd").or(tag("ls")).parse(input)?;
-
-    let (input, command_and_result) = match command {
-        "cd" => {
-            let (input, _) = tag(" ")(input)?;
-            let (input, path) = p_cd_path(input)?;
-            (input, CommandAndResult::Cd(path))
-        }
-        "ls" => {
-            let (input, _) = tag("\n")(input)?;
-            let (input, result) = p_ls_result(input)?;
-            (input, CommandAndResult::Ls(result))
-        }
-        _ => unreachable!("filtered by parser"),
-    };
-
-    Ok((input, command_and_result))
+    alt((
+        preceded(tag("$ cd "), p_cd_path).map(CommandAndResult::Cd),
+        preceded(tag("$ ls\n"), p_ls_result).map(CommandAndResult::Ls),
+    ))(input)
 }
 
 fn p_cd_path(input: &str) -> IResult<&str, CdPath> {
@@ -171,28 +159,15 @@ fn p_cd_path(input: &str) -> IResult<&str, CdPath> {
 }
 
 fn p_ls_result(input: &str) -> IResult<&str, Vec<LsEntry>> {
-    let (input, entries) = separated_list0(newline, p_ls_entry)(input)?;
-
-    Ok((input, entries))
+    separated_list0(newline, p_ls_entry)(input)
 }
 
-fn p_ls_entry<'a>(input: &'a str) -> IResult<&str, LsEntry> {
-    let p_file = |input: &'a str| -> IResult<&'a str, LsEntry<'a>> {
-        let (input, size) = take_while(|c: char| c.is_ascii_digit())(input)?;
-        let (input, _) = space1(input)?;
-        let (input, name) = take_while(|c: char| c != '\n')(input)?;
-
-        Ok((input, LsEntry::File(name, size.parse::<u64>().unwrap())))
-    };
-
-    let p_dir = |input: &'a str| -> IResult<&'a str, LsEntry<'a>> {
-        let (input, _) = tag("dir ")(input)?;
-        let (input, name) = take_while(|c: char| c != '\n')(input)?;
-
-        Ok((input, LsEntry::Dir(name)))
-    };
-
-    p_file.or(p_dir).parse(input)
+fn p_ls_entry(input: &str) -> IResult<&str, LsEntry> {
+    alt((
+        preceded(tag("dir "), take_while(|c: char| c != '\n')).map(LsEntry::Dir),
+        separated_pair(u64, space1, take_while(|c: char| c != '\n'))
+            .map(|(size, name)| LsEntry::File(size, name)),
+    ))(input)
 }
 
 #[cfg(test)]
