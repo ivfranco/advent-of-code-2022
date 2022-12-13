@@ -3,7 +3,7 @@ use nom::{
     bytes::complete::tag,
     character::complete::{digit1, newline, one_of, space1},
     multi::separated_list1,
-    sequence::{delimited, preceded},
+    sequence::{delimited, preceded, separated_pair},
     IResult, Parser,
 };
 
@@ -107,7 +107,6 @@ fn p_monkeys(input: &str) -> IResult<&str, Vec<Monkey>> {
 
 fn p_monkey(input: &str) -> IResult<&str, Monkey> {
     let (input, id) = delimited(tag("Monkey "), p_unsigned, tag(":\n"))(input)?;
-
     let (input, items) = delimited(
         tag("  Starting items: "),
         separated_list1(tag(", "), p_unsigned),
@@ -136,9 +135,9 @@ fn p_monkey(input: &str) -> IResult<&str, Monkey> {
 }
 
 fn p_operation(input: &str) -> IResult<&str, Operation> {
-    let (input, op) = one_of("+*")(input)?;
-    let (input, _) = space1(input)?;
-    let (input, digits_or_old) = digit1.or(tag("old")).parse(input)?;
+    let (input, (op, digits_or_old)) =
+        separated_pair(one_of("+*"), space1, digit1.or(tag("old")))(input)?;
+
     let binop = match op {
         '+' => BinOp::Add,
         '*' => BinOp::Mul,
@@ -149,13 +148,12 @@ fn p_operation(input: &str) -> IResult<&str, Operation> {
         _ => Rhs::Imm(digits_or_old.parse().unwrap()),
     };
     let operation = Operation { op: binop, rhs };
+
     Ok((input, operation))
 }
 
 fn p_testop(input: &str) -> IResult<&str, TestOp> {
-    let (input, op) = tag("divisible")(input)?;
-    let (input, _) = tag(" by ")(input)?;
-    let (input, arg) = p_unsigned(input)?;
+    let (input, (op, arg)) = separated_pair(tag("divisible"), tag(" by "), p_unsigned)(input)?;
 
     let testop = match op {
         "divisible" => TestOp::Divisible(arg),
