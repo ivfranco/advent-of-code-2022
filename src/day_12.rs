@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap, VecDeque};
 
 pub fn solution(input: &str) -> String {
     let map = parse(input);
@@ -65,9 +65,22 @@ fn parse(input: &str) -> Map {
 }
 
 fn shortest_to_all(map: &Map) -> HashMap<Pos, (Pos, isize)> {
-    pathfinding::directed::dijkstra::dijkstra_all(&map.end, |&pos| {
-        map.reverse_next_square(pos).map(|p| (p, 1))
-    })
+    let mut shortest = HashMap::new();
+    shortest.insert(map.end, (map.end, 0));
+    let mut queue = VecDeque::new();
+    queue.push_back((map.end, 0));
+
+    while let Some((node, cost)) = queue.pop_front() {
+        for next_node in map.reverse_next_square(node) {
+            if let Entry::Vacant(e) = shortest.entry(next_node) {
+                let next_cost = cost + 1;
+                e.insert((node, next_cost));
+                queue.push_back((next_node, next_cost));
+            }
+        }
+    }
+
+    shortest
 }
 
 fn part_one(map: &Map) -> isize {

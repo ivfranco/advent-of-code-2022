@@ -17,6 +17,5 @@ doctest = false
 [dependencies]
 itertools = "0.10.5"
 nom = "7.1.1"
-pathfinding = "4.0.0"
 regex = { version = "1.7.0", default-features = false, features = ["std", "unicode-perl"] }
 ureq = "2.5.0"
