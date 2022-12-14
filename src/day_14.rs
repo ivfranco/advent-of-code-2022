@@ -1,4 +1,8 @@
-use std::{collections::HashSet, iter::from_fn, ops::Add};
+use std::{
+    collections::{HashSet, VecDeque},
+    iter::from_fn,
+    ops::Add,
+};
 
 use nom::{
     bytes::complete::tag,
@@ -121,10 +125,6 @@ fn p_coord(input: &str) -> IResult<&str, Coord> {
         .parse(input)
 }
 
-// "trait alias"
-trait Contains: Fn(&Cave, &Coord) -> bool {}
-impl<P: Fn(&Cave, &Coord) -> bool> Contains for P {}
-
 struct Cave {
     rocks: HashSet<Coord>,
     sands: HashSet<Coord>,
@@ -148,6 +148,10 @@ impl Cave {
         }
     }
 
+    fn floor(&self) -> i64 {
+        self.deepest + 2
+    }
+
     fn rest(&mut self, sand: Coord) {
         self.sands.insert(sand);
     }
@@ -160,28 +164,16 @@ impl Cave {
         self.rocks.contains(coord) || self.sands.contains(coord)
     }
 
-    fn contains_with_floor(&self, coord: &Coord) -> bool {
-        self.contains(coord) || coord.y >= self.deepest + 2
-    }
-
-    fn dir<P: Contains>(&self, sand: Coord, contains: P) -> Option<Coord> {
-        if !contains(self, &(sand + DOWN)) {
+    fn dir(&self, sand: Coord) -> Option<Coord> {
+        if !self.contains(&sand) {
             Some(DOWN)
-        } else if !contains(self, &(sand + DOWN + LEFT)) {
+        } else if !self.contains(&sand) {
             Some(DOWN + LEFT)
-        } else if !contains(self, &(sand + DOWN + RIGHT)) {
+        } else if !self.contains(&sand) {
             Some(DOWN + RIGHT)
         } else {
             None
         }
-    }
-
-    fn dir_with_abyss(&self, sand: Coord) -> Option<Coord> {
-        self.dir(sand, Cave::contains)
-    }
-
-    fn dir_with_floor(&self, sand: Coord) -> Option<Coord> {
-        self.dir(sand, Cave::contains_with_floor)
     }
 }
 
@@ -192,7 +184,7 @@ fn part_one(paths: &[Path]) -> i64 {
     let mut cnt = 0;
     loop {
         let mut sand = START;
-        while let Some(dir) = cave.dir_with_abyss(sand) {
+        while let Some(dir) = cave.dir(sand) {
             sand = sand + dir;
             if cave.abysmal(sand) {
                 return cnt;
@@ -203,20 +195,36 @@ fn part_one(paths: &[Path]) -> i64 {
     }
 }
 
-fn part_two(paths: &[Path]) -> i64 {
-    let mut cave = Cave::new(paths);
-    let mut cnt = 0;
-    loop {
-        let mut sand = Coord { x: 500, y: 0 };
-        while let Some(dir) = cave.dir_with_floor(sand) {
-            sand = sand + dir;
+fn part_two(paths: &[Path]) -> usize {
+    let cave = Cave::new(paths);
+    let mut cnt = 1;
+
+    let mut scan_line: VecDeque<bool> = VecDeque::new();
+    scan_line.push_front(true);
+    let mut start = START.x;
+
+    for y in START.y + 1..cave.floor() {
+        let mut next_line = scan_line.clone();
+        next_line.push_back(false);
+        next_line.push_front(false);
+        start -= 1;
+
+        for (i, b) in next_line.iter_mut().enumerate() {
+            if i >= 2 {
+                *b = *b || scan_line[i - 2];
+            }
+            if i < scan_line.len() {
+                *b = *b || scan_line[i];
+            }
+            let x = i as i64 + start;
+            *b = *b && !cave.contains(&Coord { x, y });
         }
-        cave.rest(sand);
-        cnt += 1;
-        if sand == START {
-            return cnt;
-        }
+
+        cnt += next_line.iter().filter(|b| **b).count();
+        scan_line = next_line
     }
+
+    cnt
 }
 
 #[cfg(test)]
