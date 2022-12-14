@@ -48,7 +48,7 @@ struct Line {
 }
 
 impl Line {
-    #[allow(dead_code)]
+    #[cfg(test)]
     fn len(self) -> i64 {
         let (x0, y0) = self.from.to_tuple();
         let (x1, y1) = self.to.to_tuple();
@@ -96,6 +96,7 @@ impl Path {
 
 fn parse(input: &str) -> Vec<Path> {
     let (_, paths) = all_consuming(p_paths)(input).expect("valid complete parse");
+    // orthogonal lines
     assert!(paths.iter().all(|p| p.lines().all(|l| {
         let (x0, y0) = l.from.to_tuple();
         let (x1, y1) = l.to.to_tuple();
@@ -121,8 +122,8 @@ fn p_coord(input: &str) -> IResult<&str, Coord> {
 }
 
 // "trait alias"
-trait Checker: Fn(&Cave, &Coord) -> bool {}
-impl<P: Fn(&Cave, &Coord) -> bool> Checker for P {}
+trait Contains: Fn(&Cave, &Coord) -> bool {}
+impl<P: Fn(&Cave, &Coord) -> bool> Contains for P {}
 
 struct Cave {
     rocks: HashSet<Coord>,
@@ -163,12 +164,12 @@ impl Cave {
         self.contains(coord) || coord.y >= self.deepest + 2
     }
 
-    fn dir<P: Checker>(&self, sand: Coord, checker: P) -> Option<Coord> {
-        if !checker(self, &(sand + DOWN)) {
+    fn dir<P: Contains>(&self, sand: Coord, contains: P) -> Option<Coord> {
+        if !contains(self, &(sand + DOWN)) {
             Some(DOWN)
-        } else if !checker(self, &(sand + DOWN + LEFT)) {
+        } else if !contains(self, &(sand + DOWN + LEFT)) {
             Some(DOWN + LEFT)
-        } else if !checker(self, &(sand + DOWN + RIGHT)) {
+        } else if !contains(self, &(sand + DOWN + RIGHT)) {
             Some(DOWN + RIGHT)
         } else {
             None
