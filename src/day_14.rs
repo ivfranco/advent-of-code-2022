@@ -203,6 +203,11 @@ fn part_two(paths: &[Path]) -> usize {
     scan_line.push_front(true);
     let mut start = START.x;
 
+    // assume coordinate (x, y) will be filled with resting sand
+    // 1.   coordinate (x, y + 1) is rock or eventually will be filled with resting sand
+    // 2.   because of 1, coordinate (x - 1, y + 1) is rock or eventually will be filled
+    // 3.   because of 1, coordinate (x + 1, y + 1) is rock or eventually will be filled
+    // 4.   by rules, no other space on depth y will be filled by sand falling from (x, y)
     for y in START.y + 1..cave.floor() {
         let mut next_line = scan_line.clone();
         next_line.push_back(false);
