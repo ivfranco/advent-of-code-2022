@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{i64 as nom_i64, line_ending, space0},
+    character::complete::{i64 as nom_i64, line_ending},
     combinator::all_consuming,
     multi::{separated_list0, separated_list1},
     sequence::{delimited, separated_pair, tuple},
@@ -60,12 +60,7 @@ fn p_pair(input: &str) -> IResult<&str, (Packet, Packet)> {
 
 fn p_packet(input: &str) -> IResult<&str, Packet> {
     alt((
-        delimited(
-            tag("["),
-            separated_list0(tag(",").and(space0), p_packet),
-            tag("]"),
-        )
-        .map(Packet::List),
+        delimited(tag("["), separated_list0(tag(","), p_packet), tag("]")).map(Packet::List),
         nom_i64.map(Packet::Int),
     ))(input)
 }
