@@ -165,11 +165,11 @@ impl Cave {
     }
 
     fn dir(&self, sand: Coord) -> Option<Coord> {
-        if !self.contains(&sand) {
+        if !self.contains(&(sand + DOWN)) {
             Some(DOWN)
-        } else if !self.contains(&sand) {
+        } else if !self.contains(&(sand + DOWN + LEFT)) {
             Some(DOWN + LEFT)
-        } else if !self.contains(&sand) {
+        } else if !self.contains(&(sand + DOWN + RIGHT)) {
             Some(DOWN + RIGHT)
         } else {
             None
