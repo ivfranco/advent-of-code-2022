@@ -41,3 +41,50 @@ impl Coord {
         dx.abs() + dy.abs()
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Closed {
+    pub start: i64,
+    pub end: i64,
+}
+
+impl Closed {
+    pub fn new(start: i64, end: i64) -> Self {
+        Self { start, end }
+    }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(self) -> i64 {
+        self.end - self.start + 1
+    }
+
+    pub fn contains(self, x: i64) -> bool {
+        self.start <= x && x <= self.end
+    }
+
+    pub fn intersection(self, other: Self) -> Option<Self> {
+        if self.start > other.start {
+            return other.intersection(self);
+        }
+
+        if self.end >= other.start {
+            Some(Closed::new(other.start, self.end.min(other.end)))
+        } else {
+            None
+        }
+    }
+
+    pub fn connect(self, other: Self) -> Option<Self> {
+        debug_assert!(self.start <= other.start);
+
+        if other.start <= self.end + 1 {
+            Some(Closed::new(self.start, self.end.max(other.end)))
+        } else {
+            None
+        }
+    }
+
+    pub fn covering(self, other: Self) -> bool {
+        self.start <= other.start && self.end >= other.end
+    }
+}

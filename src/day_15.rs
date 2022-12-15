@@ -1,5 +1,6 @@
-use std::{collections::HashSet, iter::from_fn};
+use std::collections::HashSet;
 
+use itertools::iproduct;
 use nom::{
     bytes::complete::tag,
     character::complete::{i64, line_ending},
@@ -8,52 +9,16 @@ use nom::{
     sequence::{preceded, separated_pair},
     IResult, Parser,
 };
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use smallvec::{smallvec, SmallVec};
 
-use crate::utils::Coord;
+use crate::utils::{Closed, Coord};
 
 pub fn solution(input: &str) -> String {
     let reports = parse(input);
     format!(
         "{}, {}",
         part_one(&reports, 2_000_000),
-        part_two(&reports, 0, 4_000_000)
+        path_two(&reports, 0, 4_000_000)
     )
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Closed {
-    start: i64,
-    end: i64,
-}
-
-impl Closed {
-    fn new(start: i64, end: i64) -> Self {
-        Self { start, end }
-    }
-
-    fn len(self) -> i64 {
-        self.end - self.start + 1
-    }
-
-    fn contains(self, x: i64) -> bool {
-        self.start <= x && x <= self.end
-    }
-
-    fn connect(self, other: Self) -> Option<Self> {
-        debug_assert!(self.start <= other.start);
-
-        if other.start <= self.end + 1 {
-            Some(Closed::new(self.start, self.end.max(other.end)))
-        } else {
-            None
-        }
-    }
-
-    fn covering(self, other: Self) -> bool {
-        self.start <= other.start && self.end >= other.end
-    }
 }
 
 struct Report {
@@ -62,6 +27,14 @@ struct Report {
 }
 
 impl Report {
+    fn radius(&self) -> i64 {
+        self.sensor.manhattan_distance(self.beacon)
+    }
+
+    fn contains(&self, c: Coord) -> bool {
+        self.sensor.manhattan_distance(c) <= self.radius()
+    }
+
     fn cover_at(&self, y: i64) -> Option<Closed> {
         let d_beacon = self.sensor.manhattan_distance(self.beacon);
         let d_y = (self.sensor.y - y).abs();
@@ -73,16 +46,66 @@ impl Report {
             None
         }
     }
+
+    fn edges(&self) -> [Line; 4] {
+        let r = self.radius();
+        let (x, y) = self.sensor.to_tuple();
+        [
+            Line::new_diagonal(x + y + r + 1),
+            Line::new_diagonal(x + y - r - 1),
+            Line::new_anti_diagonal(y - x - r - 1),
+            Line::new_anti_diagonal(y - x + r + 1),
+        ]
+    }
 }
 
-const REPORTS: usize = 32;
-const CONNECTED: usize = 4;
+// y = ax + b, a = 1 or -1
+#[derive(Clone)]
+struct Line {
+    a: bool,
+    b: i64,
+}
+
+impl Line {
+    fn new_diagonal(b: i64) -> Self {
+        Self { a: false, b }
+    }
+
+    fn new_anti_diagonal(b: i64) -> Self {
+        Self { a: true, b }
+    }
+
+    fn y(&self, x: i64) -> i64 {
+        if self.a {
+            x + self.b
+        } else {
+            -x + self.b
+        }
+    }
+
+    fn intersect(&self, other: &Self) -> Option<Coord> {
+        if self.a == other.a {
+            return None;
+        }
+
+        let diff = if self.a {
+            other.b - self.b
+        } else {
+            self.b - other.b
+        };
+
+        if diff % 2 != 0 {
+            return None;
+        }
+
+        let x = diff / 2;
+        let y = self.y(x);
+        Some(Coord::new(x, y))
+    }
+}
 
 fn parse(input: &str) -> Vec<Report> {
     let (_, reports) = all_consuming(p_reports)(input).expect("valid complete parse");
-    if reports.len() > REPORTS {
-        eprintln!("Warning: allocation");
-    }
     reports
 }
 
@@ -110,13 +133,12 @@ fn p_coord(input: &str) -> IResult<&str, Coord> {
     .parse(input)
 }
 
-fn cover_at(reports: &[Report], y: i64) -> SmallVec<[Closed; CONNECTED]> {
-    let mut covers: SmallVec<[Closed; REPORTS]> =
-        reports.iter().filter_map(|r| r.cover_at(y)).collect();
+fn cover_at(reports: &[Report], y: i64) -> Vec<Closed> {
+    let mut covers: Vec<Closed> = reports.iter().filter_map(|r| r.cover_at(y)).collect();
     covers.sort_by_key(|c| c.start);
 
     let mut i = 0;
-    let mut connected: SmallVec<[Closed; CONNECTED]> = smallvec![covers[0]];
+    let mut connected: Vec<Closed> = vec![covers[0]];
 
     for cover in covers.into_iter().skip(1) {
         if let Some(c) = connected[i].connect(cover) {
@@ -142,42 +164,21 @@ fn part_one(reports: &[Report], y: i64) -> i64 {
     cover_len - beacons.len() as i64
 }
 
-fn spots(min: i64, max: i64, connected: &[Closed]) -> impl Iterator<Item = i64> + '_ {
-    let mut x = min;
-    let mut i = connected
-        .iter()
-        .position(|c| c.contains(min) || c.start >= min)
-        .unwrap_or(connected.len());
+fn path_two(reports: &[Report], min: i64, max: i64) -> i64 {
+    let (anti, orth): (Vec<_>, Vec<_>) = reports.iter().flat_map(|r| r.edges()).partition(|s| s.a);
 
-    from_fn(move || {
-        while i < connected.len() && connected[i].contains(x) {
-            x = connected[i].end + 1;
-            i += 1;
-        }
-        if x <= max {
-            let next = Some(x);
-            x += 1;
-            next
-        } else {
-            None
-        }
-    })
-}
-
-fn part_two(reports: &[Report], min: i64, max: i64) -> i64 {
-    let y = (min..=max)
-        .into_par_iter()
-        .find_any(|y| {
-            let connected = cover_at(reports, *y);
-            !connected.iter().any(|c| c.covering(Closed::new(min, max)))
+    let uncovered = iproduct!(anti, orth)
+        .filter_map(|(s0, s1)| s0.intersect(&s1))
+        .find(|c| {
+            c.x >= min
+                && c.x <= max
+                && c.y >= min
+                && c.y <= max
+                && reports.iter().all(|r| !r.contains(*c))
         })
-        .expect("exactly one solution");
+        .unwrap();
 
-    let connected = cover_at(reports, y);
-    let x = spots(min, max, &connected)
-        .next()
-        .expect("exactly one solution");
-    x * 4_000_000 + y
+    uncovered.x * 4_000_000 + uncovered.y
 }
 
 #[cfg(test)]
@@ -223,6 +224,6 @@ Sensor at x=20, y=1: closest beacon is at x=15, y=3";
     #[test]
     fn example_part_two() {
         let reports = parse(INPUT);
-        assert_eq!(part_two(&reports, 0, 20), 56000011);
+        assert_eq!(path_two(&reports, 0, 20), 56000011);
     }
 }
