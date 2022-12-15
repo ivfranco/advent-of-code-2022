@@ -1,27 +1,27 @@
 use std::collections::{hash_map::Entry, HashMap, VecDeque};
 
+use crate::utils::{Coord, DOWN, LEFT, RIGHT, UP};
+
 pub fn solution(input: &str) -> String {
     let map = parse(input);
     format!("{}, {}", part_one(&map), part_two(&map))
 }
 
-type Pos = (isize, isize);
-
 struct Map {
     grid: Vec<Vec<i8>>,
-    start: Pos,
-    end: Pos,
+    start: Coord,
+    end: Coord,
 }
 
 impl Map {
-    fn get_height(&self, (x, y): Pos) -> Option<i8> {
+    fn get_height(&self, Coord { x, y }: Coord) -> Option<i8> {
         self.grid.get(y as usize)?.get(x as usize).copied()
     }
 
-    fn reverse_next_square(&self, from @ (x, y): Pos) -> impl Iterator<Item = Pos> + '_ {
-        [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    fn reverse_next_square(&self, from: Coord) -> impl Iterator<Item = Coord> + '_ {
+        [UP, DOWN, LEFT, RIGHT]
             .into_iter()
-            .map(move |(dx, dy)| (x + dx, y + dy))
+            .map(move |d| from + d)
             .filter(move |&pos| {
                 let Some(h) = self.get_height(from) else {
                     return false;
@@ -35,8 +35,8 @@ impl Map {
 }
 
 fn parse(input: &str) -> Map {
-    let mut start = (0, 0);
-    let mut end = (0, 0);
+    let mut start = Coord::default();
+    let mut end = Coord::default();
 
     let grid = input
         .lines()
@@ -47,11 +47,11 @@ fn parse(input: &str) -> Map {
                 .enumerate()
                 .map(|(row, b)| match b {
                     b'S' => {
-                        start = (row as isize, col as isize);
+                        start = Coord::new(row as i64, col as i64);
                         0
                     }
                     b'E' => {
-                        end = (row as isize, col as isize);
+                        end = Coord::new(row as i64, col as i64);
                         (b'z' - b'a') as i8
                     }
                     b'a'..=b'z' => (b - b'a') as i8,
@@ -64,7 +64,7 @@ fn parse(input: &str) -> Map {
     Map { grid, start, end }
 }
 
-fn shortest_to_all(map: &Map) -> HashMap<Pos, (Pos, isize)> {
+fn shortest_to_all(map: &Map) -> HashMap<Coord, (Coord, isize)> {
     let mut shortest = HashMap::new();
     shortest.insert(map.end, (map.end, 0));
     let mut queue = VecDeque::new();

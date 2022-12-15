@@ -1,4 +1,6 @@
-use std::{collections::HashSet, ops::Sub};
+use std::collections::HashSet;
+
+use crate::utils::Coord;
 
 pub fn solution(input: &str) -> String {
     let motions = parse(input);
@@ -13,7 +15,7 @@ enum FourWay {
     R,
 }
 
-fn parse(input: &str) -> Vec<(FourWay, i32)> {
+fn parse(input: &str) -> Vec<(FourWay, i64)> {
     let regex = Regex::new(r"(?P<dir>U|D|L|R) (?P<steps>\d+)").unwrap();
     input
         .lines()
@@ -43,31 +45,9 @@ enum EightWay {
 use regex::Regex;
 use EightWay::*;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
-struct Pos {
-    x: i32,
-    y: i32,
-}
-
-impl Sub for Pos {
-    type Output = Pos;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Pos::new(self.x - rhs.x, self.y - rhs.y)
-    }
-}
-
-impl Pos {
-    fn new(x: i32, y: i32) -> Self {
-        Self { x, y }
-    }
-
-    fn to_tuple(self) -> (i32, i32) {
-        (self.x, self.y)
-    }
-
+impl Coord {
     fn follow4(self, dir: FourWay) -> Self {
-        let Pos { x, y } = self;
+        let Coord { x, y } = self;
 
         let (nx, ny) = match dir {
             FourWay::U => (x, y + 1),
@@ -76,7 +56,7 @@ impl Pos {
             FourWay::R => (x + 1, y),
         };
 
-        Pos::new(nx, ny)
+        Coord::new(nx, ny)
     }
 
     fn follow8(self, dir: EightWay) -> Self {
@@ -87,7 +67,7 @@ impl Pos {
     }
 }
 
-fn tail_heading(head: Pos, tail: Pos) -> Option<EightWay> {
+fn tail_heading(head: Coord, tail: Coord) -> Option<EightWay> {
     match (head - tail).to_tuple() {
         (x, y) if x.abs() <= 1 && y.abs() <= 1 => None,
         (x, 0) if x > 0 => Some(Four(R)),
@@ -102,9 +82,9 @@ fn tail_heading(head: Pos, tail: Pos) -> Option<EightWay> {
     }
 }
 
-fn simulate_knots<const N: usize>(motions: &[(FourWay, i32)]) -> usize {
+fn simulate_knots<const N: usize>(motions: &[(FourWay, i64)]) -> usize {
     let mut visited = HashSet::new();
-    let mut knots = [Pos::default(); N];
+    let mut knots = [Coord::default(); N];
     visited.insert(knots[N - 1]);
 
     for &(dir, steps) in motions {
@@ -122,11 +102,11 @@ fn simulate_knots<const N: usize>(motions: &[(FourWay, i32)]) -> usize {
     visited.len()
 }
 
-fn part_one(motions: &[(FourWay, i32)]) -> usize {
+fn part_one(motions: &[(FourWay, i64)]) -> usize {
     simulate_knots::<2>(motions)
 }
 
-fn part_two(motions: &[(FourWay, i32)]) -> usize {
+fn part_two(motions: &[(FourWay, i64)]) -> usize {
     simulate_knots::<10>(motions)
 }
 

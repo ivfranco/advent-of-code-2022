@@ -1,7 +1,6 @@
 use std::{
     collections::{HashSet, VecDeque},
     iter::from_fn,
-    ops::Add,
 };
 
 use nom::{
@@ -13,36 +12,11 @@ use nom::{
     IResult, Parser,
 };
 
+use crate::utils::{Coord, DOWN, LEFT, RIGHT};
+
 pub fn solution(input: &str) -> String {
     let paths = parse(input);
     format!("{}, {}", part_one(&paths), part_two(&paths))
-}
-
-const DOWN: Coord = Coord { x: 0, y: 1 };
-const LEFT: Coord = Coord { x: -1, y: 0 };
-const RIGHT: Coord = Coord { x: 1, y: 0 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Coord {
-    x: i64,
-    y: i64,
-}
-
-impl Add for Coord {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Coord {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-        }
-    }
-}
-
-impl Coord {
-    fn to_tuple(self) -> (i64, i64) {
-        (self.x, self.y)
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -54,26 +28,23 @@ struct Line {
 impl Line {
     #[cfg(test)]
     fn len(self) -> i64 {
-        let (x0, y0) = self.from.to_tuple();
-        let (x1, y1) = self.to.to_tuple();
-        let (dx, dy) = (x0 - x1, y0 - y1);
+        let (dx, dy) = (self.from - self.to).to_tuple();
         dx.abs() + dy.abs() + 1
     }
 
     fn rocks(self) -> impl Iterator<Item = Coord> {
-        let (mut x, mut y) = self.from.to_tuple();
-        let (x1, y1) = self.to.to_tuple();
-        let (dx, dy) = ((x1 - x).signum(), (y1 - y).signum());
+        let mut dot = self.from;
+        let (dx, dy) = (self.to - dot).to_tuple();
+        let delta = Coord::new(dx.signum(), dy.signum());
         let mut terminated = false;
 
         from_fn(move || {
             if !terminated {
-                let next = Coord { x, y };
-                if x == x1 && y == y1 {
+                let next = dot;
+                if dot == self.to {
                     terminated = true;
                 }
-                x += dx;
-                y += dy;
+                dot = dot + delta;
                 Some(next)
             } else {
                 None
@@ -251,8 +222,8 @@ mod tests {
             .iter()
             .flat_map(|p| p.lines())
             .flat_map(|l| l.rocks())
-            .count();
-        assert_eq!(len_sum as usize, rock_count)
+            .count() as i64;
+        assert_eq!(len_sum, rock_count)
     }
 
     #[test]
