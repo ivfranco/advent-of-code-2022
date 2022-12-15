@@ -9,6 +9,7 @@ use nom::{
     IResult, Parser,
 };
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use smallvec::{smallvec, SmallVec};
 
 use crate::utils::Coord;
 
@@ -74,8 +75,14 @@ impl Report {
     }
 }
 
+const REPORTS: usize = 32;
+const CONNECTED: usize = 4;
+
 fn parse(input: &str) -> Vec<Report> {
     let (_, reports) = all_consuming(p_reports)(input).expect("valid complete parse");
+    if reports.len() > REPORTS {
+        eprintln!("Warning: allocation");
+    }
     reports
 }
 
@@ -103,12 +110,13 @@ fn p_coord(input: &str) -> IResult<&str, Coord> {
     .parse(input)
 }
 
-fn cover_at(reports: &[Report], y: i64) -> Vec<Closed> {
-    let mut covers: Vec<_> = reports.iter().filter_map(|r| r.cover_at(y)).collect();
+fn cover_at(reports: &[Report], y: i64) -> SmallVec<[Closed; CONNECTED]> {
+    let mut covers: SmallVec<[Closed; REPORTS]> =
+        reports.iter().filter_map(|r| r.cover_at(y)).collect();
     covers.sort_by_key(|c| c.start);
 
     let mut i = 0;
-    let mut connected = vec![covers[i]];
+    let mut connected: SmallVec<[Closed; CONNECTED]> = smallvec![covers[0]];
 
     for cover in covers.into_iter().skip(1) {
         if let Some(c) = connected[i].connect(cover) {
