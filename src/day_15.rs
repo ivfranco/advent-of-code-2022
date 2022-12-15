@@ -8,6 +8,7 @@ use nom::{
     sequence::{preceded, separated_pair},
     IResult, Parser,
 };
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 use crate::utils::Coord;
 
@@ -47,6 +48,10 @@ impl Closed {
         } else {
             None
         }
+    }
+
+    fn covering(self, other: Self) -> bool {
+        self.start <= other.start && self.end >= other.end
     }
 }
 
@@ -152,18 +157,17 @@ fn spots(min: i64, max: i64, connected: &[Closed]) -> impl Iterator<Item = i64> 
 }
 
 fn part_two(reports: &[Report], min: i64, max: i64) -> i64 {
-    let beacons: HashSet<_> = reports.iter().map(|r| r.beacon).collect();
-    for y in min..=max {
-        let connected = cover_at(reports, y);
-        for spot in spots(min, max, &connected) {
-            let b = Coord::new(spot, y);
-            if !beacons.contains(&b) {
-                return spot * 4_000_000 + y;
-            }
-        }
-    }
+    let y = (min..=max)
+        .into_par_iter()
+        .find_first(|y| {
+            let connected = cover_at(reports, *y);
+            !connected.iter().any(|c| c.covering(Closed::new(min, max)))
+        })
+        .unwrap();
 
-    unreachable!("must be a spot")
+    let connected = cover_at(reports, y);
+    let x = spots(min, max, &connected).next().unwrap();
+    x * 4_000_000 + y
 }
 
 #[cfg(test)]
