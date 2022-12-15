@@ -2,7 +2,7 @@ use std::{collections::HashSet, iter::from_fn};
 
 use nom::{
     bytes::complete::tag,
-    character::complete::{self, line_ending},
+    character::complete::{i64, line_ending},
     combinator::all_consuming,
     multi::separated_list1,
     sequence::{preceded, separated_pair},
@@ -41,7 +41,7 @@ impl Closed {
     }
 
     fn connect(self, other: Self) -> Option<Self> {
-        assert!(self.start <= other.start);
+        debug_assert!(self.start <= other.start);
 
         if other.start <= self.end + 1 {
             Some(Closed::new(self.start, self.end.max(other.end)))
@@ -67,10 +67,7 @@ impl Report {
         let r = d_beacon - d_y;
 
         if r >= 0 {
-            Some(Closed {
-                start: self.sensor.x - r,
-                end: self.sensor.x + r,
-            })
+            Some(Closed::new(self.sensor.x - r, self.sensor.x + r))
         } else {
             None
         }
@@ -87,20 +84,23 @@ fn p_reports(input: &str) -> IResult<&str, Vec<Report>> {
 }
 
 fn p_report(input: &str) -> IResult<&str, Report> {
-    preceded(
-        tag("Sensor at "),
-        separated_pair(p_coord, tag(": closest beacon is at "), p_coord),
+    separated_pair(
+        preceded(tag("Sensor at "), p_coord),
+        tag(": "),
+        preceded(tag("closest beacon is at "), p_coord),
     )
     .map(|(sensor, beacon)| Report { sensor, beacon })
     .parse(input)
 }
 
 fn p_coord(input: &str) -> IResult<&str, Coord> {
-    let (input, _) = tag("x=")(input)?;
-    let (input, x) = complete::i64(input)?;
-    let (input, _) = tag(", y=")(input)?;
-    let (input, y) = complete::i64(input)?;
-    Ok((input, Coord::new(x, y)))
+    separated_pair(
+        preceded(tag("x="), i64),
+        tag(", "),
+        preceded(tag("y="), i64),
+    )
+    .map(|(x, y)| Coord::new(x, y))
+    .parse(input)
 }
 
 fn cover_at(reports: &[Report], y: i64) -> Vec<Closed> {
@@ -159,14 +159,16 @@ fn spots(min: i64, max: i64, connected: &[Closed]) -> impl Iterator<Item = i64> 
 fn part_two(reports: &[Report], min: i64, max: i64) -> i64 {
     let y = (min..=max)
         .into_par_iter()
-        .find_first(|y| {
+        .find_any(|y| {
             let connected = cover_at(reports, *y);
             !connected.iter().any(|c| c.covering(Closed::new(min, max)))
         })
-        .unwrap();
+        .expect("exactly one solution");
 
     let connected = cover_at(reports, y);
-    let x = spots(min, max, &connected).next().unwrap();
+    let x = spots(min, max, &connected)
+        .next()
+        .expect("exactly one solution");
     x * 4_000_000 + y
 }
 
