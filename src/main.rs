@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         advent_2022::day_13::solution,
         advent_2022::day_14::solution,
         advent_2022::day_15::solution,
-        // advent_2022::day_16::solution,
+        advent_2022::day_16::solution,
         // advent_2022::day_17::solution,
         // advent_2022::day_18::solution,
         // advent_2022::day_19::solution,
