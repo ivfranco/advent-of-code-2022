@@ -1,5 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap};
-use std::hash::Hash;
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    hash::Hash,
+};
 
 use nom::{
     branch::alt,
@@ -68,10 +70,10 @@ fn compress<'a>(valves: &'a [Valve]) -> HashMap<&'a str, CompressedValve<'a>> {
     for &k in valves.keys().filter(|&&k| k == START || valves[k].flow > 0) {
         let predecessors = dijkstra_all(&k, |n| {
             if *n != k && valves[n].flow > 0 {
-                return vec![];
+                vec![]
+            } else {
+                valves[n].exit.iter().map(|e| (*e, 1)).collect()
             }
-
-            valves[n].exit.iter().map(|e| (*e, 1)).collect()
         });
 
         let exit = predecessors
@@ -92,6 +94,8 @@ fn compress<'a>(valves: &'a [Valve]) -> HashMap<&'a str, CompressedValve<'a>> {
 
     compressed
 }
+
+const START: &str = "AA";
 
 struct IdValve {
     name: usize,
@@ -143,8 +147,6 @@ fn p_valve(input: &str) -> IResult<&str, Valve> {
     Ok((input, Valve { name, flow, exit }))
 }
 
-const START: &str = "AA";
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct State {
     remaining: i64,
@@ -153,11 +155,16 @@ struct State {
 }
 
 impl State {
-    fn new(start: usize) -> Self {
+    fn new(valves: &HashMap<usize, IdValve>, start: usize) -> Self {
+        let mut opened = BitSet::new();
+        if valves[&start].flow == 0 {
+            opened.insert(start);
+        }
+
         Self {
             remaining: 30,
             current: (start, 0),
-            opened: BitSet::new(),
+            opened,
         }
     }
 
@@ -196,7 +203,7 @@ impl State {
     }
 
     fn finished(&self, valves: &HashMap<usize, IdValve>) -> bool {
-        assert!(self.remaining >= 0);
+        debug_assert!(self.remaining >= 0);
         self.remaining == 0 || self.opened.len() == valves.len()
     }
 
@@ -247,21 +254,24 @@ impl BitSet {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct ElephantState {
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct StateWithElephant {
     remaining: i64,
-    you: (usize, i64),
-    elephant: (usize, i64),
+    actors: [(usize, i64); 2],
     opened: BitSet,
 }
 
-impl ElephantState {
-    fn new(start: usize) -> Self {
-        ElephantState {
+impl StateWithElephant {
+    fn new(valves: &HashMap<usize, IdValve>, start: usize) -> Self {
+        let mut opened = BitSet::new();
+        if valves[&start].flow == 0 {
+            opened.insert(start);
+        }
+
+        Self {
             remaining: 26,
-            you: (start, 0),
-            elephant: (start, 0),
-            opened: BitSet::new(),
+            actors: [(start, 0), (start, 0)],
+            opened,
         }
     }
 
@@ -274,62 +284,43 @@ impl ElephantState {
         self.remaining == 0 || self.opened.len() == valves.len()
     }
 
-    fn you_moves(&self, valves: &HashMap<usize, IdValve>) -> Vec<(Self, i64)> {
+    fn actor_moves(&self, valves: &HashMap<usize, IdValve>, actor: usize) -> Vec<(Self, i64)> {
         let mut nexts = vec![];
-        let (dest, distance) = self.you;
+        let (dest, distance) = self.actors[actor];
 
         if distance > 0 {
-            let mut next = self.clone();
-            next.you = (dest, distance - 1);
+            let mut next = *self;
+            next.actors[actor] = (dest, distance - 1);
             nexts.push((next, 0));
             return nexts;
         }
 
         if !self.opened(dest) {
-            let mut next = self.clone();
+            let mut next = *self;
             next.opened.insert(dest);
             let cost = next.remaining * valves[&dest].flow;
             nexts.push((next, -cost));
         }
 
         for (next_dest, next_distance) in &valves[&dest].exit {
-            let mut next = self.clone();
-            next.you = (*next_dest, next_distance - 1);
+            let mut next = *self;
+            next.actors[actor] = (*next_dest, next_distance - 1);
             nexts.push((next, 0));
         }
 
         nexts
+    }
+
+    fn you_moves(&self, valves: &HashMap<usize, IdValve>) -> Vec<(Self, i64)> {
+        self.actor_moves(valves, 0)
     }
 
     fn elephant_moves(&self, valves: &HashMap<usize, IdValve>) -> Vec<(Self, i64)> {
-        let mut nexts = vec![];
-        let (dest, distance) = self.elephant;
-
-        if distance > 0 {
-            let mut next = self.clone();
-            next.elephant = (dest, distance - 1);
-            nexts.push((next, 0));
-            return nexts;
-        }
-
-        if !self.opened(dest) {
-            let mut next = self.clone();
-            next.opened.insert(dest);
-            let cost = next.remaining * valves[&dest].flow;
-            nexts.push((next, -cost));
-        }
-
-        for (next_dest, next_distance) in &valves[&dest].exit {
-            let mut next = self.clone();
-            next.elephant = (*next_dest, next_distance - 1);
-            nexts.push((next, 0));
-        }
-
-        nexts
+        self.actor_moves(valves, 1)
     }
 
     fn moves(&self, valves: &HashMap<usize, IdValve>) -> Vec<(Self, i64)> {
-        let mut moved = self.clone();
+        let mut moved = *self;
         moved.remaining -= 1;
 
         moved
@@ -343,30 +334,34 @@ impl ElephantState {
             .collect()
     }
 
-    fn heuristic(&self, sorted_by_flow: &[(usize, i64)]) -> i64 {
-        let mut h = 0;
-        let mut r = self.remaining * 2;
-        let mut i = 0;
-
-        while r >= 1 && i < sorted_by_flow.len() {
-            let inc = sorted_by_flow[i..]
-                .iter()
-                .position(|(name, _)| !self.opened(*name));
-
-            if let Some(inc) = inc {
-                i += inc;
-            } else {
-                break;
-            }
-
-            r -= 1;
-            h += sorted_by_flow[i].1 * r;
-            i += 1;
-            r -= 1;
-        }
-
-        -h
+    fn heuristic(&self, sorted_by_flow: &[(usize, i64)], valves: &HashMap<usize, IdValve>) -> i64 {
+        self.actors
+            .into_iter()
+            .map(|actor| {
+                let state = State {
+                    remaining: self.remaining,
+                    current: actor,
+                    opened: self.opened,
+                };
+                one_actor_cost(&state, valves, sorted_by_flow)
+            })
+            .sum()
     }
+}
+
+fn one_actor_cost(
+    state: &State,
+    valves: &HashMap<usize, IdValve>,
+    sorted_by_flow: &[(usize, i64)],
+) -> i64 {
+    let (_, cost) = astar(
+        state,
+        |state| state.moves(valves),
+        |state| state.heuristic(sorted_by_flow),
+        |state| state.finished(valves),
+    )
+    .unwrap();
+    cost
 }
 
 fn part_one(valves: &HashMap<usize, IdValve>, start: usize) -> i64 {
@@ -374,15 +369,7 @@ fn part_one(valves: &HashMap<usize, IdValve>, start: usize) -> i64 {
     sorted_by_flow.sort_by_key(|(_, f)| *f);
     sorted_by_flow.reverse();
 
-    let (_, cost) = astar(
-        &State::new(start),
-        |state| state.moves(valves),
-        |state| state.heuristic(&sorted_by_flow),
-        |state| state.finished(valves),
-    )
-    .unwrap();
-
-    -cost
+    -one_actor_cost(&State::new(valves, start), valves, &sorted_by_flow)
 }
 
 fn part_two(valves: &HashMap<usize, IdValve>, start: usize) -> i64 {
@@ -391,9 +378,9 @@ fn part_two(valves: &HashMap<usize, IdValve>, start: usize) -> i64 {
     sorted_by_flow.reverse();
 
     let (_, cost) = astar(
-        &ElephantState::new(start),
+        &StateWithElephant::new(valves, start),
         |state| state.moves(valves),
-        |state| state.heuristic(&sorted_by_flow),
+        |state| state.heuristic(&sorted_by_flow, valves),
         |state| state.finished(valves),
     )
     .unwrap();
