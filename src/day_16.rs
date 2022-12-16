@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, BTreeSet, HashMap};
+use std::collections::{hash_map::Entry, HashMap};
 use std::hash::Hash;
 
 use nom::{
@@ -16,7 +16,7 @@ pub fn solution(input: &str) -> String {
     let valves = parse(input);
     let compressed = compress(&valves);
     let (ids, start) = identifiers(&compressed);
-    format!("{}, {}", part_one(&compressed), part_two(&ids, start))
+    format!("{}, {}", part_one(&ids, start), part_two(&ids, start))
 }
 
 #[derive(Debug)]
@@ -146,57 +146,61 @@ fn p_valve(input: &str) -> IResult<&str, Valve> {
 const START: &str = "AA";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct State<'a> {
+struct State {
     remaining: i64,
-    current: &'a str,
-    opened: BTreeSet<&'a str>,
+    current: (usize, i64),
+    opened: BitSet,
 }
 
-impl<'a> State<'a> {
-    fn new() -> Self {
+impl State {
+    fn new(start: usize) -> Self {
         Self {
             remaining: 30,
-            current: START,
-            opened: BTreeSet::new(),
+            current: (start, 0),
+            opened: BitSet::new(),
         }
     }
 
-    fn opened(&self, valve: &str) -> bool {
+    fn opened(&self, valve: usize) -> bool {
         self.opened.contains(valve)
     }
 
-    fn move_to(&self, valve: &'a str, cost: i64) -> Option<(Self, i64)> {
-        if self.remaining >= cost {
+    fn moves(&self, valves: &HashMap<usize, IdValve>) -> Vec<(Self, i64)> {
+        let mut nexts = vec![];
+        let (dest, distance) = self.current;
+
+        if distance > 0 {
             let mut next = self.clone();
-
-            next.remaining -= cost;
-            next.current = valve;
-
-            Some((next, 0))
-        } else {
-            None
-        }
-    }
-
-    fn open(&self, valves: &HashMap<&str, CompressedValve>) -> (Self, i64) {
-        if self.opened.contains(self.current) {
-            panic!("check opened");
+            next.remaining -= 1;
+            next.current = (dest, distance - 1);
+            nexts.push((next, 0));
+            return nexts;
         }
 
-        let mut next = self.clone();
-        next.opened.insert(next.current);
-        next.remaining -= 1;
-        let cost = next.remaining * valves[next.current].flow;
+        if !self.opened(dest) {
+            let mut next = self.clone();
+            next.remaining -= 1;
+            next.opened.insert(dest);
+            let cost = next.remaining * valves[&dest].flow;
+            nexts.push((next, -cost));
+        }
 
-        (next, -cost)
+        for (next_dest, next_distance) in &valves[&dest].exit {
+            let mut next = self.clone();
+            next.remaining -= 1;
+            next.current = (*next_dest, next_distance - 1);
+            nexts.push((next, 0));
+        }
+
+        nexts
     }
 
-    fn finished(&self, valves: &HashMap<&str, CompressedValve>) -> bool {
+    fn finished(&self, valves: &HashMap<usize, IdValve>) -> bool {
         assert!(self.remaining >= 0);
         self.remaining == 0 || self.opened.len() == valves.len()
     }
 
-    fn heuristic(&self, sorted_by_flow: &[(&str, i64)]) -> i64 {
+    fn heuristic(&self, sorted_by_flow: &[(usize, i64)]) -> i64 {
         let mut h = 0;
         let mut r = self.remaining;
         let mut i = 0;
@@ -204,7 +208,7 @@ impl<'a> State<'a> {
         while r >= 1 && i < sorted_by_flow.len() {
             let inc = sorted_by_flow[i..]
                 .iter()
-                .position(|(name, _)| !self.opened(name));
+                .position(|(name, _)| !self.opened(*name));
 
             if let Some(inc) = inc {
                 i += inc;
@@ -222,7 +226,7 @@ impl<'a> State<'a> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct BitSet(u64);
 
 impl BitSet {
@@ -365,25 +369,14 @@ impl ElephantState {
     }
 }
 
-fn part_one(valves: &HashMap<&str, CompressedValve>) -> i64 {
-    let mut sorted_by_flow: Vec<(&str, i64)> = valves.values().map(|v| (v.name, v.flow)).collect();
+fn part_one(valves: &HashMap<usize, IdValve>, start: usize) -> i64 {
+    let mut sorted_by_flow: Vec<(usize, i64)> = valves.values().map(|v| (v.name, v.flow)).collect();
     sorted_by_flow.sort_by_key(|(_, f)| *f);
     sorted_by_flow.reverse();
 
     let (_, cost) = astar(
-        &State::new(),
-        |state| {
-            let mut nexts = vec![];
-
-            if !state.opened(state.current) {
-                nexts.push(state.open(valves));
-            }
-            for (valve, cost) in &valves[state.current].exit {
-                nexts.extend(state.move_to(valve, *cost));
-            }
-
-            nexts
-        },
+        &State::new(start),
+        |state| state.moves(valves),
         |state| state.heuristic(&sorted_by_flow),
         |state| state.finished(valves),
     )
@@ -427,7 +420,8 @@ Valve JJ has flow rate=21; tunnel leads to valve II";
     fn example_part_one() {
         let valves = parse(INPUT);
         let compressed = compress(&valves);
-        assert_eq!(part_one(&compressed), 1651);
+        let (ids, start) = identifiers(&compressed);
+        assert_eq!(part_one(&ids, start), 1651);
     }
 
     #[test]
