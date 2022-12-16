@@ -1,4 +1,5 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{hash_map::Entry, BTreeSet, HashMap};
+use std::hash::Hash;
 
 use nom::{
     branch::alt,
@@ -14,7 +15,8 @@ use pathfinding::prelude::{astar, dijkstra_all};
 pub fn solution(input: &str) -> String {
     let valves = parse(input);
     let compressed = compress(&valves);
-    format!("{}, {}", part_one(&compressed), part_two(&compressed))
+    let (ids, start) = identifiers(&compressed);
+    format!("{}, {}", part_one(&compressed), part_two(&ids, start))
 }
 
 #[derive(Debug)]
@@ -34,6 +36,29 @@ struct CompressedValve<'a> {
     name: &'a str,
     flow: i64,
     exit: Vec<(&'a str, i64)>,
+}
+
+struct IdCache<T> {
+    cache: HashMap<T, usize>,
+}
+
+impl<T: PartialEq + Eq + Hash> IdCache<T> {
+    fn new() -> Self {
+        Self {
+            cache: HashMap::new(),
+        }
+    }
+
+    fn id(&mut self, item: T) -> usize {
+        let len = self.cache.len() as usize;
+        match self.cache.entry(item) {
+            Entry::Vacant(e) => {
+                e.insert(len);
+                len
+            }
+            Entry::Occupied(e) => *e.get(),
+        }
+    }
 }
 
 fn compress<'a>(valves: &'a [Valve]) -> HashMap<&'a str, CompressedValve<'a>> {
@@ -66,6 +91,38 @@ fn compress<'a>(valves: &'a [Valve]) -> HashMap<&'a str, CompressedValve<'a>> {
     }
 
     compressed
+}
+
+struct IdValve {
+    name: usize,
+    flow: i64,
+    exit: Vec<(usize, i64)>,
+}
+
+fn identifiers(valves: &HashMap<&str, CompressedValve>) -> (HashMap<usize, IdValve>, usize) {
+    let mut cache = IdCache::new();
+
+    for &name in valves.keys() {
+        cache.id(name);
+    }
+
+    let id_valves = valves
+        .values()
+        .map(|v| {
+            (
+                cache.id(v.name),
+                IdValve {
+                    name: cache.id(v.name),
+                    flow: v.flow,
+                    exit: v.exit.iter().map(|(n, c)| (cache.id(n), *c)).collect(),
+                },
+            )
+        })
+        .collect();
+
+    let start = cache.id(START);
+
+    (id_valves, start)
 }
 
 fn p_valves(input: &str) -> IResult<&str, Vec<Valve>> {
@@ -165,34 +222,55 @@ impl<'a> State<'a> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct ElephantState<'a> {
-    remaining: i64,
-    you: (&'a str, i64),
-    elephant: (&'a str, i64),
-    opened: BTreeSet<&'a str>,
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct BitSet(u64);
+
+impl BitSet {
+    fn new() -> Self {
+        Self(0)
+    }
+
+    fn insert(&mut self, k: usize) {
+        self.0 |= 0b1 << k;
+    }
+
+    fn contains(&self, k: usize) -> bool {
+        self.0 & (0b1 << k) != 0
+    }
+
+    fn len(&self) -> usize {
+        self.0.count_ones() as usize
+    }
 }
 
-impl<'a> ElephantState<'a> {
-    fn new() -> Self {
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct ElephantState {
+    remaining: i64,
+    you: (usize, i64),
+    elephant: (usize, i64),
+    opened: BitSet,
+}
+
+impl ElephantState {
+    fn new(start: usize) -> Self {
         ElephantState {
             remaining: 26,
-            you: (START, 0),
-            elephant: (START, 0),
-            opened: BTreeSet::new(),
+            you: (start, 0),
+            elephant: (start, 0),
+            opened: BitSet::new(),
         }
     }
 
-    fn opened(&self, valve: &str) -> bool {
+    fn opened(&self, valve: usize) -> bool {
         self.opened.contains(valve)
     }
 
-    fn finished(&self, valves: &HashMap<&str, CompressedValve>) -> bool {
+    fn finished(&self, valves: &HashMap<usize, IdValve>) -> bool {
         assert!(self.remaining >= 0);
         self.remaining == 0 || self.opened.len() == valves.len()
     }
 
-    fn you_moves(&self, valves: &'a HashMap<&str, CompressedValve>) -> Vec<(Self, i64)> {
+    fn you_moves(&self, valves: &HashMap<usize, IdValve>) -> Vec<(Self, i64)> {
         let mut nexts = vec![];
         let (dest, distance) = self.you;
 
@@ -206,20 +284,20 @@ impl<'a> ElephantState<'a> {
         if !self.opened(dest) {
             let mut next = self.clone();
             next.opened.insert(dest);
-            let cost = next.remaining * valves[dest].flow;
+            let cost = next.remaining * valves[&dest].flow;
             nexts.push((next, -cost));
         }
 
-        for (next_dest, next_distance) in &valves[dest].exit {
+        for (next_dest, next_distance) in &valves[&dest].exit {
             let mut next = self.clone();
-            next.you = (next_dest, next_distance - 1);
+            next.you = (*next_dest, next_distance - 1);
             nexts.push((next, 0));
         }
 
         nexts
     }
 
-    fn elephant_moves(&self, valves: &'a HashMap<&str, CompressedValve>) -> Vec<(Self, i64)> {
+    fn elephant_moves(&self, valves: &HashMap<usize, IdValve>) -> Vec<(Self, i64)> {
         let mut nexts = vec![];
         let (dest, distance) = self.elephant;
 
@@ -233,20 +311,20 @@ impl<'a> ElephantState<'a> {
         if !self.opened(dest) {
             let mut next = self.clone();
             next.opened.insert(dest);
-            let cost = next.remaining * valves[dest].flow;
+            let cost = next.remaining * valves[&dest].flow;
             nexts.push((next, -cost));
         }
 
-        for (next_dest, next_distance) in &valves[dest].exit {
+        for (next_dest, next_distance) in &valves[&dest].exit {
             let mut next = self.clone();
-            next.elephant = (next_dest, next_distance - 1);
+            next.elephant = (*next_dest, next_distance - 1);
             nexts.push((next, 0));
         }
 
         nexts
     }
 
-    fn moves(&self, valves: &'a HashMap<&str, CompressedValve>) -> Vec<(Self, i64)> {
+    fn moves(&self, valves: &HashMap<usize, IdValve>) -> Vec<(Self, i64)> {
         let mut moved = self.clone();
         moved.remaining -= 1;
 
@@ -261,7 +339,7 @@ impl<'a> ElephantState<'a> {
             .collect()
     }
 
-    fn heuristic(&self, sorted_by_flow: &[(&str, i64)]) -> i64 {
+    fn heuristic(&self, sorted_by_flow: &[(usize, i64)]) -> i64 {
         let mut h = 0;
         let mut r = self.remaining * 2;
         let mut i = 0;
@@ -269,7 +347,7 @@ impl<'a> ElephantState<'a> {
         while r >= 1 && i < sorted_by_flow.len() {
             let inc = sorted_by_flow[i..]
                 .iter()
-                .position(|(name, _)| !self.opened(name));
+                .position(|(name, _)| !self.opened(*name));
 
             if let Some(inc) = inc {
                 i += inc;
@@ -314,13 +392,13 @@ fn part_one(valves: &HashMap<&str, CompressedValve>) -> i64 {
     -cost
 }
 
-fn part_two(valves: &HashMap<&str, CompressedValve>) -> i64 {
-    let mut sorted_by_flow: Vec<(&str, i64)> = valves.values().map(|v| (v.name, v.flow)).collect();
+fn part_two(valves: &HashMap<usize, IdValve>, start: usize) -> i64 {
+    let mut sorted_by_flow: Vec<(usize, i64)> = valves.values().map(|v| (v.name, v.flow)).collect();
     sorted_by_flow.sort_by_key(|(_, f)| *f);
     sorted_by_flow.reverse();
 
     let (_, cost) = astar(
-        &ElephantState::new(),
+        &ElephantState::new(start),
         |state| state.moves(valves),
         |state| state.heuristic(&sorted_by_flow),
         |state| state.finished(valves),
@@ -356,6 +434,7 @@ Valve JJ has flow rate=21; tunnel leads to valve II";
     fn example_part_two() {
         let valves = parse(INPUT);
         let compressed = compress(&valves);
-        assert_eq!(part_two(&compressed), 1707);
+        let (ids, start) = identifiers(&compressed);
+        assert_eq!(part_two(&ids, start), 1707);
     }
 }
