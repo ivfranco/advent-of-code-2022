@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Display, str::from_utf8};
+use std::{fmt::Display, str::from_utf8};
 
 use crate::utils::{BitSet, Coord, LEFT, RIGHT};
 
@@ -149,20 +149,6 @@ impl Chamber {
             self.highest = self.highest.max(c.y);
         }
     }
-
-    fn signature(&self) -> Vec<BitSet> {
-        let full = BitSet::from_bits(0b1111111);
-        let mut covered = BitSet::new();
-
-        for i in (0..self.stopped.len()).rev() {
-            covered = covered.union(&self.stopped[i]);
-            if covered.is_superset(&full) {
-                return self.stopped[i..].to_vec();
-            }
-        }
-
-        unreachable!("Shouldn't be called on short tower");
-    }
 }
 
 impl Display for Chamber {
@@ -222,7 +208,7 @@ fn part_one(jets: &[Jet]) -> i64 {
     chamber.highest
 }
 
-fn pattern_search(jets: &[Jet]) -> i64 {
+fn pattern_search(jets: &[Jet]) -> (i64, i64) {
     // coprime lengths
     let lcm = jets.len() * ROCKS.len();
     let mut chamber = Chamber::new();
@@ -253,7 +239,7 @@ fn pattern_search(jets: &[Jet]) -> i64 {
                 .unwrap();
 
             if first_match < last_match {
-                return (last_match - first_match) as i64;
+                return (first_match as i64 + 1, (last_match - first_match) as i64);
             }
         }
     }
@@ -265,10 +251,9 @@ fn pattern_search(jets: &[Jet]) -> i64 {
 }
 
 const PART_TWO_ROCKS: i64 = 1000000000000;
-const SKIP: i64 = 2;
 
 fn part_two(jets: &[Jet]) -> i64 {
-    let pattern_len = pattern_search(jets);
+    let (skip, pattern_len) = pattern_search(jets);
     // coprime lengths
     let lcm = (jets.len() * ROCKS.len()) as i64;
     let mut chamber = Chamber::new();
@@ -277,7 +262,7 @@ fn part_two(jets: &[Jet]) -> i64 {
     let mut rocks = ROCKS.iter().cycle().copied();
 
     let (mut skip_chamber, skip_height) = {
-        for _ in 0..lcm * SKIP {
+        for _ in 0..lcm * skip {
             one_piece(&mut chamber, rocks.next().unwrap(), &mut jets);
         }
         (chamber.clone(), chamber.highest)
@@ -291,8 +276,8 @@ fn part_two(jets: &[Jet]) -> i64 {
         chamber.highest - skip_height
     };
 
-    let pattern_height = (PART_TWO_ROCKS - lcm * SKIP) / (lcm * pattern_len) * loop_height_growth;
-    let remaining_rocks = (PART_TWO_ROCKS - lcm * SKIP) % (lcm * pattern_len);
+    let pattern_height = (PART_TWO_ROCKS - lcm * skip) / (lcm * pattern_len) * loop_height_growth;
+    let remaining_rocks = (PART_TWO_ROCKS - lcm * skip) % (lcm * pattern_len);
 
     for _ in 0..remaining_rocks {
         one_piece(&mut skip_chamber, rocks.next().unwrap(), &mut jets);
