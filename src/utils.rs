@@ -28,7 +28,7 @@ impl Sub for Coord {
 }
 
 impl Coord {
-    pub fn new(x: i64, y: i64) -> Self {
+    pub const fn new(x: i64, y: i64) -> Self {
         Self { x, y }
     }
 
