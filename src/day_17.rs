@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fmt::Display, str::from_utf8};
 
-use crate::utils::{Coord, LEFT, RIGHT};
+use crate::utils::{BitSet, Coord, LEFT, RIGHT};
 
 const DOWN: Coord = Coord::new(0, -1);
 
@@ -97,7 +97,7 @@ impl Piece {
 
 #[derive(Clone)]
 struct Chamber {
-    stopped: HashSet<Coord>,
+    stopped: Vec<BitSet>,
     highest: i64,
 }
 
@@ -108,8 +108,24 @@ impl Chamber {
 
     fn new() -> Self {
         Self {
-            stopped: HashSet::new(),
+            stopped: Vec::new(),
             highest: Self::BOTTOM_BORDER,
+        }
+    }
+
+    fn translate_coord(&self, c: Coord) -> (usize, usize) {
+        (
+            (c.x - Self::LEFT_BORDER - 1) as usize,
+            (c.y - Self::BOTTOM_BORDER - 1) as usize,
+        )
+    }
+
+    fn contains(&self, c: Coord) -> bool {
+        let (x, y) = self.translate_coord(c);
+        if let Some(r) = self.stopped.get(y) {
+            r.contains(x)
+        } else {
+            false
         }
     }
 
@@ -118,16 +134,34 @@ impl Chamber {
             c.x <= Self::LEFT_BORDER
                 || c.x > Self::LEFT_BORDER + Self::WIDTH
                 || c.y <= Self::BOTTOM_BORDER
-                || self.stopped.contains(&c)
+                || self.contains(c)
         })
     }
 
     fn stop(&mut self, piece: Piece) {
         debug_assert!(!self.blocked(piece));
         for c in piece.coords() {
-            self.stopped.insert(c);
+            let (x, y) = self.translate_coord(c);
+            while self.stopped.len() <= y {
+                self.stopped.push(BitSet::new());
+            }
+            self.stopped[y].insert(x);
+            self.highest = self.highest.max(c.y);
         }
-        self.highest = self.highest.max(piece.coords().map(|c| c.y).max().unwrap());
+    }
+
+    fn signature(&self) -> Vec<BitSet> {
+        let full = BitSet::from_bits(0b1111111);
+        let mut covered = BitSet::new();
+
+        for i in (0..self.stopped.len()).rev() {
+            covered = covered.union(&self.stopped[i]);
+            if covered.is_superset(&full) {
+                return self.stopped[i..].to_vec();
+            }
+        }
+
+        unreachable!("Shouldn't be called on short tower");
     }
 }
 
@@ -138,7 +172,7 @@ impl Display for Chamber {
             row[Self::LEFT_BORDER as usize] = b'|';
             row[(Self::WIDTH + Self::LEFT_BORDER + 1) as usize] = b'|';
             for x in Self::LEFT_BORDER + 1..=Self::LEFT_BORDER + Self::WIDTH {
-                if self.stopped.contains(&Coord::new(x, self.highest - dy)) {
+                if self.contains(Coord::new(x, self.highest - dy)) {
                     row[x as usize] = b'#';
                 }
             }
@@ -246,7 +280,6 @@ fn part_two(jets: &[Jet]) -> i64 {
         for _ in 0..lcm * SKIP {
             one_piece(&mut chamber, rocks.next().unwrap(), &mut jets);
         }
-        println!("{}", chamber);
         (chamber.clone(), chamber.highest)
     };
 
@@ -255,20 +288,7 @@ fn part_two(jets: &[Jet]) -> i64 {
             one_piece(&mut chamber, rocks.next().unwrap(), &mut jets);
         }
 
-        println!("{}", chamber);
-        dbg!(chamber.highest - skip_height)
-    };
-
-    {
-        for _ in 0..lcm * pattern_len {
-            one_piece(&mut chamber, rocks.next().unwrap(), &mut jets);
-        }
-
-        println!("{}", chamber);
-        assert_eq!(
-            chamber.highest - loop_height_growth - skip_height,
-            loop_height_growth
-        );
+        chamber.highest - skip_height
     };
 
     let pattern_height = (PART_TWO_ROCKS - lcm * SKIP) / (lcm * pattern_len) * loop_height_growth;

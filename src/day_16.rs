@@ -14,6 +14,8 @@ use nom::{
 };
 use pathfinding::prelude::{astar, dijkstra_all};
 
+use crate::utils::BitSet;
+
 pub fn solution(input: &str) -> String {
     let valves = parse(input);
     let compressed = compress(&valves);
@@ -230,27 +232,6 @@ impl State {
         }
 
         -h
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct BitSet(u64);
-
-impl BitSet {
-    fn new() -> Self {
-        Self(0)
-    }
-
-    fn insert(&mut self, k: usize) {
-        self.0 |= 0b1 << k;
-    }
-
-    fn contains(&self, k: usize) -> bool {
-        self.0 & (0b1 << k) != 0
-    }
-
-    fn len(&self) -> usize {
-        self.0.count_ones() as usize
     }
 }
 

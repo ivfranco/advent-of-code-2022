@@ -88,3 +88,47 @@ impl Closed {
         self.start <= other.start && self.end >= other.end
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BitSet(u64);
+
+impl BitSet {
+    pub fn new() -> Self {
+        Self(0)
+    }
+
+    pub fn from_bits(bits: u64) -> Self {
+        Self(bits)
+    }
+
+    pub fn insert(&mut self, k: usize) {
+        self.0 |= 0b1 << k;
+    }
+
+    pub fn contains(&self, k: usize) -> bool {
+        self.0 & (0b1 << k) != 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.count_ones() as usize
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn union(&self, other: &Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    pub fn is_superset(&self, other: &Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+impl Default for BitSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
