@@ -39,7 +39,7 @@ fn parse(input: &str) -> Vec<Jet> {
         .collect()
 }
 
-/// pieces upside down
+/// pieces are upside down
 
 /// ####
 const BAR: &[u64] = &[0b111100000];
@@ -127,7 +127,8 @@ impl Chamber {
         }
     }
 
-    // should be good enough
+    /// Should be good enough. A perfectly accurate pattern signature has to run a multi-start DFS
+    /// from the top line of the tower to determine the lower reachable height from open areas.
     fn signature(&self) -> Vec<BitSet> {
         let start = self.stopped.len().saturating_sub(16);
         self.stopped[start..].to_vec()
@@ -226,9 +227,6 @@ fn pattern_search(jets: &[Jet]) -> (i64, i64) {
     }
 
     unreachable!("must be a pattern")
-
-    // pattern from loop 2 repeats at loop 347
-    // a loop of length 345
 }
 
 const PART_TWO_ROCKS: i64 = 1000000000000;

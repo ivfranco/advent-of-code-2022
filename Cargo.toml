@@ -19,4 +19,5 @@ itertools = "0.10.5"
 nom = "7.1.1"
 pathfinding = "4.1.1"
 regex = { version = "1.7.0", default-features = false, features = ["std", "unicode-perl"] }
+union-find = "0.4.1"
 ureq = { version = "2.5.0", default-features = false, features = ["tls"] }

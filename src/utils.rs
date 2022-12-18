@@ -1,4 +1,4 @@
-use std::ops::{Add, Sub};
+use std::ops::{Add, RangeInclusive, Sub};
 
 pub const UP: Coord = Coord { x: 0, y: -1 };
 pub const DOWN: Coord = Coord { x: 0, y: 1 };
@@ -86,6 +86,10 @@ impl Closed {
 
     pub fn covering(self, other: Self) -> bool {
         self.start <= other.start && self.end >= other.end
+    }
+
+    pub fn range(self) -> RangeInclusive<i64> {
+        self.start..=self.end
     }
 }
 

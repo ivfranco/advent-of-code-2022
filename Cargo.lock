@@ -10,6 +10,7 @@ dependencies = [
  "nom",
  "pathfinding",
  "regex",
+ "union-find",
  "ureq",
 ]
 
@@ -344,6 +345,12 @@ checksum = "5c5713f0fc4b5db668a2ac63cdb7bb4469d8c9fed047b1d0292cc7b0ce2ba921"
 dependencies = [
  "tinyvec",
 ]
+
+[[package]]
+name = "union-find"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aef317275984b19dddb358f0586a4c2e3e8244cc5b48cf65d1e109f48cc96dd"
 
 [[package]]
 name = "untrusted"
