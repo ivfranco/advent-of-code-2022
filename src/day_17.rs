@@ -35,59 +35,48 @@ fn parse(input: &str) -> Vec<Jet> {
         .collect()
 }
 
-// increases along positive x and y axis
-const BAR: &[Coord] = &[
-    Coord::new(0, 0),
-    Coord::new(1, 0),
-    Coord::new(2, 0),
-    Coord::new(3, 0),
-];
+/// pieces upside down
 
-const CROSS: &[Coord] = &[
-    Coord::new(0, 1),
-    Coord::new(1, 0),
-    Coord::new(1, 1),
-    Coord::new(1, 2),
-    Coord::new(2, 1),
-];
+/// ####
+const BAR: &[u64] = &[0b111100000];
 
-const CORNER: &[Coord] = &[
-    Coord::new(0, 0),
-    Coord::new(1, 0),
-    Coord::new(2, 0),
-    Coord::new(2, 1),
-    Coord::new(2, 2),
-];
+/// .#.
+/// ###
+/// .#.
+const CROSS: &[u64] = &[0b010000000, 0b111000000, 0b010000000];
 
-const PILLAR: &[Coord] = &[
-    Coord::new(0, 0),
-    Coord::new(0, 1),
-    Coord::new(0, 2),
-    Coord::new(0, 3),
-];
+/// ..#
+/// ..#
+/// ###
+const CORNER: &[u64] = &[0b111000000, 0b001000000, 0b001000000];
 
-const SQUARE: &[Coord] = &[
-    Coord::new(0, 0),
-    Coord::new(0, 1),
-    Coord::new(1, 0),
-    Coord::new(1, 1),
-];
+/// #
+/// #
+/// #
+/// #
+const PILLAR: &[u64] = &[0b100000000, 0b100000000, 0b100000000, 0b100000000];
 
-const ROCKS: [&[Coord]; 5] = [BAR, CROSS, CORNER, PILLAR, SQUARE];
+/// ##
+/// ##
+const SQUARE: &[u64] = &[0b110000000, 0b110000000];
+
+const ROCKS: [&[u64]; 5] = [BAR, CROSS, CORNER, PILLAR, SQUARE];
 
 #[derive(Debug, Clone, Copy)]
 struct Piece {
     bottom_left: Coord,
-    rock: &'static [Coord],
+    rock: &'static [u64],
 }
 
 impl Piece {
-    fn new(bottom_left: Coord, rock: &'static [Coord]) -> Self {
+    fn new(bottom_left: Coord, rock: &'static [u64]) -> Self {
         Self { bottom_left, rock }
     }
 
-    fn coords(self) -> impl Iterator<Item = Coord> {
-        self.rock.iter().map(move |c| self.bottom_left + *c)
+    fn rows(self) -> impl Iterator<Item = BitSet> {
+        self.rock
+            .iter()
+            .map(move |b| BitSet::from_bits(b >> self.bottom_left.x))
     }
 
     fn move_to(self, d: Coord) -> Self {
@@ -102,52 +91,40 @@ struct Chamber {
 }
 
 impl Chamber {
-    const WIDTH: i64 = 7;
-    const LEFT_BORDER: i64 = 0;
-    const BOTTOM_BORDER: i64 = 0;
+    const WIDTH: usize = 7;
+    const WALL: BitSet = BitSet::from_bits((0b1 << (Self::WIDTH + 1)) | 0b1);
+    const BOTTOM: BitSet = BitSet::from_bits((0b1 << (Self::WIDTH + 2)) - 1);
 
     fn new() -> Self {
+        let stopped = vec![Self::BOTTOM];
         Self {
-            stopped: Vec::new(),
-            highest: Self::BOTTOM_BORDER,
-        }
-    }
-
-    fn translate_coord(&self, c: Coord) -> (usize, usize) {
-        (
-            (c.x - Self::LEFT_BORDER - 1) as usize,
-            (c.y - Self::BOTTOM_BORDER - 1) as usize,
-        )
-    }
-
-    fn contains(&self, c: Coord) -> bool {
-        let (x, y) = self.translate_coord(c);
-        if let Some(r) = self.stopped.get(y) {
-            r.contains(x)
-        } else {
-            false
+            stopped,
+            highest: 0,
         }
     }
 
     fn blocked(&self, piece: Piece) -> bool {
-        piece.coords().any(|c| {
-            c.x <= Self::LEFT_BORDER
-                || c.x > Self::LEFT_BORDER + Self::WIDTH
-                || c.y <= Self::BOTTOM_BORDER
-                || self.contains(c)
+        piece.rows().enumerate().any(|(i, r)| {
+            let y = piece.bottom_left.y as usize + i;
+            let c = self.stopped.get(y).copied().unwrap_or(Self::WALL);
+            !r.intersection(&c).is_empty()
         })
     }
 
     fn stop(&mut self, piece: Piece) {
         debug_assert!(!self.blocked(piece));
-        for c in piece.coords() {
-            let (x, y) = self.translate_coord(c);
+        for (i, r) in piece.rows().enumerate() {
+            let y = piece.bottom_left.y as usize + i;
             while self.stopped.len() <= y {
-                self.stopped.push(BitSet::new());
+                self.stopped.push(Self::WALL);
             }
-            self.stopped[y].insert(x);
-            self.highest = self.highest.max(c.y);
+            self.stopped[y] = self.stopped[y].union(&r);
+            self.highest = self.highest.max(y as i64);
         }
+    }
+
+    fn signature(&self) -> Vec<BitSet> {
+        self.stopped[self.stopped.len() - 16..].to_vec()
     }
 }
 
@@ -155,10 +132,10 @@ impl Display for Chamber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for dy in 0..10 {
             let mut row = [b' '; Self::WIDTH as usize + 2];
-            row[Self::LEFT_BORDER as usize] = b'|';
-            row[(Self::WIDTH + Self::LEFT_BORDER + 1) as usize] = b'|';
-            for x in Self::LEFT_BORDER + 1..=Self::LEFT_BORDER + Self::WIDTH {
-                if self.contains(Coord::new(x, self.highest - dy)) {
+            row[0] = b'|';
+            row[Self::WIDTH + 1] = b'|';
+            for x in 1..=Self::WIDTH {
+                if self.stopped[(self.highest - dy) as usize].contains(x as usize) {
                     row[x as usize] = b'#';
                 }
             }
@@ -170,14 +147,11 @@ impl Display for Chamber {
     }
 }
 
-fn one_piece<J>(chamber: &mut Chamber, rock: &'static [Coord], mut jets: J)
+fn one_piece<J>(chamber: &mut Chamber, rock: &'static [u64], mut jets: J)
 where
     J: Iterator<Item = Jet>,
 {
-    let mut piece = Piece::new(
-        Coord::new(3 + Chamber::LEFT_BORDER, chamber.highest + 4),
-        rock,
-    );
+    let mut piece = Piece::new(Coord::new(3, chamber.highest + 4), rock);
 
     loop {
         let dir = jets.next().unwrap().to_dir();

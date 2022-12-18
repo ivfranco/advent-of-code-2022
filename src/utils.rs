@@ -93,11 +93,11 @@ impl Closed {
 pub struct BitSet(u64);
 
 impl BitSet {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(0)
     }
 
-    pub fn from_bits(bits: u64) -> Self {
+    pub const fn from_bits(bits: u64) -> Self {
         Self(bits)
     }
 
@@ -120,6 +120,10 @@ impl BitSet {
 
     pub fn union(&self, other: &Self) -> Self {
         Self(self.0 | other.0)
+    }
+
+    pub fn intersection(&self, other: &Self) -> Self {
+        Self(self.0 & other.0)
     }
 
     pub fn is_superset(&self, other: &Self) -> bool {
