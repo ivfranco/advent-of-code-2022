@@ -1,4 +1,8 @@
-use std::{fmt::Display, str::from_utf8};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt::Display,
+    str::from_utf8,
+};
 
 use crate::utils::{BitSet, Coord, LEFT, RIGHT};
 
@@ -123,8 +127,10 @@ impl Chamber {
         }
     }
 
+    // should be good enough
     fn signature(&self) -> Vec<BitSet> {
-        self.stopped[self.stopped.len() - 16..].to_vec()
+        let start = self.stopped.len().saturating_sub(16);
+        self.stopped[start..].to_vec()
     }
 }
 
@@ -147,6 +153,21 @@ impl Display for Chamber {
     }
 }
 
+fn one_jet(chamber: &mut Chamber, piece: &mut Piece, jet: Jet) -> bool {
+    let dir = jet.to_dir();
+    if !chamber.blocked(piece.move_to(dir)) {
+        *piece = piece.move_to(dir);
+    }
+
+    if chamber.blocked(piece.move_to(DOWN)) {
+        chamber.stop(*piece);
+        true
+    } else {
+        *piece = piece.move_to(DOWN);
+        false
+    }
+}
+
 fn one_piece<J>(chamber: &mut Chamber, rock: &'static [u64], mut jets: J)
 where
     J: Iterator<Item = Jet>,
@@ -154,19 +175,12 @@ where
     let mut piece = Piece::new(Coord::new(3, chamber.highest + 4), rock);
 
     loop {
-        let dir = jets.next().unwrap().to_dir();
-        if !chamber.blocked(piece.move_to(dir)) {
-            piece = piece.move_to(dir);
-        }
-
-        if chamber.blocked(piece.move_to(DOWN)) {
+        let jet = jets.next().unwrap();
+        let stopped = one_jet(chamber, &mut piece, jet);
+        if stopped {
             break;
-        } else {
-            piece = piece.move_to(DOWN);
         }
     }
-
-    chamber.stop(piece);
 }
 
 fn part_one(jets: &[Jet]) -> i64 {
@@ -183,37 +197,30 @@ fn part_one(jets: &[Jet]) -> i64 {
 }
 
 fn pattern_search(jets: &[Jet]) -> (i64, i64) {
-    // coprime lengths
-    let lcm = jets.len() * ROCKS.len();
     let mut chamber = Chamber::new();
 
-    let mut jets = jets.iter().cycle().copied();
-    let mut rocks = ROCKS.iter().cycle().copied();
+    let mut jets = jets.iter().copied().enumerate().cycle();
+    let mut rocks = ROCKS.iter().copied().enumerate().cycle();
 
-    let mut last_highest = chamber.highest;
-    let mut records = Vec::with_capacity(1000);
+    const TRIAL_LEN: i64 = 10000;
+    let mut records: HashMap<(usize, usize, Vec<BitSet>), i64> = HashMap::new();
 
-    const TRIAL_LEN: usize = 1000;
-    const MATCH_LEN: usize = 32;
+    for i in 0..TRIAL_LEN {
+        let (rock_idx, rock) = rocks.next().unwrap();
+        let (mut jet_idx, mut jet) = jets.next().unwrap();
+        let mut piece = Piece::new(Coord::new(3, chamber.highest + 4), rock);
 
-    for _ in 0..TRIAL_LEN {
-        for _ in 0..lcm {
-            one_piece(&mut chamber, rocks.next().unwrap(), &mut jets);
+        while !one_jet(&mut chamber, &mut piece, jet) {
+            (jet_idx, jet) = jets.next().unwrap();
         }
 
-        records.push(chamber.highest - last_highest);
-        last_highest = chamber.highest;
-
-        if records.len() > MATCH_LEN {
-            let last_match = records.len() - MATCH_LEN;
-
-            let first_match = records
-                .windows(MATCH_LEN)
-                .position(|c| c == &records[last_match..])
-                .unwrap();
-
-            if first_match < last_match {
-                return (first_match as i64 + 1, (last_match - first_match) as i64);
+        match records.entry((rock_idx, jet_idx, chamber.signature())) {
+            Entry::Occupied(e) => {
+                let skip = *e.get();
+                return (skip + 1, i - skip);
+            }
+            Entry::Vacant(e) => {
+                e.insert(i);
             }
         }
     }
@@ -229,29 +236,28 @@ const PART_TWO_ROCKS: i64 = 1000000000000;
 fn part_two(jets: &[Jet]) -> i64 {
     let (skip, pattern_len) = pattern_search(jets);
     // coprime lengths
-    let lcm = (jets.len() * ROCKS.len()) as i64;
     let mut chamber = Chamber::new();
 
     let mut jets = jets.iter().cycle().copied();
     let mut rocks = ROCKS.iter().cycle().copied();
 
     let (mut skip_chamber, skip_height) = {
-        for _ in 0..lcm * skip {
+        for _ in 0..skip {
             one_piece(&mut chamber, rocks.next().unwrap(), &mut jets);
         }
         (chamber.clone(), chamber.highest)
     };
 
     let loop_height_growth = {
-        for _ in 0..lcm * pattern_len {
+        for _ in 0..pattern_len {
             one_piece(&mut chamber, rocks.next().unwrap(), &mut jets);
         }
 
         chamber.highest - skip_height
     };
 
-    let pattern_height = (PART_TWO_ROCKS - lcm * skip) / (lcm * pattern_len) * loop_height_growth;
-    let remaining_rocks = (PART_TWO_ROCKS - lcm * skip) % (lcm * pattern_len);
+    let pattern_height = (PART_TWO_ROCKS - skip) / pattern_len * loop_height_growth;
+    let remaining_rocks = (PART_TWO_ROCKS - skip) % pattern_len;
 
     for _ in 0..remaining_rocks {
         one_piece(&mut skip_chamber, rocks.next().unwrap(), &mut jets);
