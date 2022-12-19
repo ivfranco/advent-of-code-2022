@@ -87,8 +87,13 @@ impl Closed {
     pub fn covering(self, other: Self) -> bool {
         self.start <= other.start && self.end >= other.end
     }
+}
 
-    pub fn range(self) -> RangeInclusive<i64> {
+impl IntoIterator for Closed {
+    type Item = i64;
+    type IntoIter = RangeInclusive<i64>;
+
+    fn into_iter(self) -> Self::IntoIter {
         self.start..=self.end
     }
 }

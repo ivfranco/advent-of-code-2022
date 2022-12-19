@@ -128,7 +128,8 @@ impl Chamber {
     }
 
     /// Should be good enough. A perfectly accurate pattern signature has to run a multi-start DFS
-    /// from the top line of the tower to determine the lower reachable height from open areas.
+    /// from the empty spaces on top line of the tower to determine the lowest reachable height from
+    /// open area.
     fn signature(&self) -> Vec<BitSet> {
         let start = self.stopped.len().saturating_sub(16);
         self.stopped[start..].to_vec()
@@ -137,13 +138,13 @@ impl Chamber {
 
 impl Display for Chamber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for dy in 0..10 {
-            let mut row = [b' '; Self::WIDTH as usize + 2];
+        for line in self.stopped.iter().rev().take(10) {
+            let mut row = [b'.'; Self::WIDTH + 2];
             row[0] = b'|';
             row[Self::WIDTH + 1] = b'|';
-            for x in 1..=Self::WIDTH {
-                if self.stopped[(self.highest - dy) as usize].contains(x as usize) {
-                    row[x as usize] = b'#';
+            for (x, b) in row.iter_mut().enumerate().skip(1).take(Self::WIDTH) {
+                if line.contains(x) {
+                    *b = b'#';
                 }
             }
             f.write_str(from_utf8(row.as_slice()).unwrap())?;
@@ -233,32 +234,30 @@ const PART_TWO_ROCKS: i64 = 1000000000000;
 
 fn part_two(jets: &[Jet]) -> i64 {
     let (skip, pattern_len) = pattern_search(jets);
-    // coprime lengths
     let mut chamber = Chamber::new();
 
     let mut jets = jets.iter().cycle().copied();
     let mut rocks = ROCKS.iter().cycle().copied();
 
     let (mut skip_chamber, skip_height) = {
-        for _ in 0..skip {
-            one_piece(&mut chamber, rocks.next().unwrap(), &mut jets);
+        for rock in (&mut rocks).take(skip as usize) {
+            one_piece(&mut chamber, rock, &mut jets);
         }
         (chamber.clone(), chamber.highest)
     };
 
     let loop_height_growth = {
-        for _ in 0..pattern_len {
-            one_piece(&mut chamber, rocks.next().unwrap(), &mut jets);
+        for rock in (&mut rocks).take(pattern_len as usize) {
+            one_piece(&mut chamber, rock, &mut jets);
         }
-
         chamber.highest - skip_height
     };
 
     let pattern_height = (PART_TWO_ROCKS - skip) / pattern_len * loop_height_growth;
     let remaining_rocks = (PART_TWO_ROCKS - skip) % pattern_len;
 
-    for _ in 0..remaining_rocks {
-        one_piece(&mut skip_chamber, rocks.next().unwrap(), &mut jets);
+    for rock in rocks.take(remaining_rocks as usize) {
+        one_piece(&mut skip_chamber, rock, &mut jets);
     }
 
     pattern_height + skip_chamber.highest

@@ -54,7 +54,7 @@ impl<T: PartialEq + Eq + Hash> IdCache<T> {
     }
 
     fn id(&mut self, item: T) -> usize {
-        let len = self.cache.len() as usize;
+        let len = self.cache.len();
         match self.cache.entry(item) {
             Entry::Vacant(e) => {
                 e.insert(len);

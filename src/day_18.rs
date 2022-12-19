@@ -1,6 +1,6 @@
 use std::{collections::HashSet, ops::Add};
 
-use itertools::{iproduct, Itertools};
+use itertools::Itertools;
 use nom::{
     bytes::complete::tag,
     character::complete::{self, line_ending},
@@ -8,7 +8,7 @@ use nom::{
     multi::separated_list1,
     IResult,
 };
-use union_find::{QuickUnionUf, UnionByRank, UnionFind};
+use pathfinding::prelude::dfs_reach;
 
 use crate::utils::Closed;
 
@@ -62,10 +62,6 @@ fn p_coord(input: &str) -> IResult<&str, Coord3> {
     let (input, _) = tag(",")(input)?;
     let (input, z) = complete::i64(input)?;
 
-    assert!(x >= 0);
-    assert!(y >= 0);
-    assert!(z >= 0);
-
     Ok((input, Coord3::new(x, y, z)))
 }
 
@@ -82,66 +78,49 @@ fn part_one(coords: &[Coord3]) -> usize {
         .sum()
 }
 
-fn bounding(coords: &[Coord3]) -> (Closed, Closed, Closed) {
+fn bounding_and_one(coords: &[Coord3]) -> (Closed, Closed, Closed) {
     let (min_x, max_x) = coords.iter().map(|c| c.x).minmax().into_option().unwrap();
     let (min_y, max_y) = coords.iter().map(|c| c.y).minmax().into_option().unwrap();
     let (min_z, max_z) = coords.iter().map(|c| c.z).minmax().into_option().unwrap();
 
     (
-        Closed::new(min_x, max_x),
-        Closed::new(min_y, max_y),
-        Closed::new(min_z, max_z),
+        Closed::new(min_x - 1, max_x + 1),
+        Closed::new(min_y - 1, max_y + 1),
+        Closed::new(min_z - 1, max_z + 1),
     )
 }
 
 fn part_two(coords: &[Coord3]) -> usize {
     let droplet: HashSet<_> = coords.iter().collect();
-    let (x_closed, y_closed, z_closed) = bounding(coords);
-    let (x_range, y_range, z_range) = (
-        Closed::new(x_closed.start - 1, x_closed.end + 1),
-        Closed::new(y_closed.start - 1, y_closed.end + 1),
-        Closed::new(z_closed.start - 1, z_closed.end + 1),
-    );
-    let to_key = |c: Coord3| -> usize {
-        let u = Coord3::new(
-            c.x - x_range.start,
-            c.y - y_range.start,
-            c.z - z_range.start,
-        );
+    let (x_range, y_range, z_range) = bounding_and_one(coords);
 
-        (u.x + u.y * x_range.len() + u.z * x_range.len() * y_range.len()) as usize
-    };
+    let outside: HashSet<_> = dfs_reach(
+        Coord3::new(x_range.start, y_range.start, z_range.start),
+        |&c| {
+            let droplet = &droplet;
+            DIRS.into_iter().filter_map(move |d| {
+                let n = d + c;
+                if !droplet.contains(&n)
+                    && x_range.contains(n.x)
+                    && y_range.contains(n.y)
+                    && z_range.contains(n.z)
+                {
+                    Some(n)
+                } else {
+                    None
+                }
+            })
+        },
+    )
+    .collect();
 
-    let mut union: QuickUnionUf<UnionByRank> =
-        QuickUnionUf::new((x_range.len() * y_range.len() * z_range.len()) as usize);
-
-    for (x, y, z) in iproduct!(x_range.range(), y_range.range(), z_range.range()) {
-        let c = Coord3::new(x, y, z);
-        if droplet.contains(&c) {
-            continue;
-        }
-
-        let key = to_key(c);
-        let neighbors = DIRS.into_iter().map(|d| d + c).filter(|n| {
-            !droplet.contains(n)
-                && x_range.contains(n.x)
-                && y_range.contains(n.y)
-                && z_range.contains(n.z)
-        });
-
-        for n in neighbors {
-            union.union(key, to_key(n));
-        }
-    }
-
-    let outside_key = to_key(Coord3::new(x_range.start, y_range.start, z_range.start));
     droplet
         .iter()
         .map(|c| {
             DIRS.into_iter()
                 .filter(|d| {
                     let n = **c + *d;
-                    !droplet.contains(&n) && union.find(outside_key) == union.find(to_key(n))
+                    outside.contains(&n)
                 })
                 .count()
         })
