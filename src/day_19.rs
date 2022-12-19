@@ -155,16 +155,27 @@ impl State {
             .collect()
     }
 
-    fn heuristic(&self) -> i32 {
-        // assume a geode robot can be built each minute from now on
-        let mut h = 0;
-        let mut r = self.robots[GEODE];
+    fn heuristic(&self, blueprint: &Blueprint) -> i32 {
+        // assume a ore robot and a obsidian robot can be built for free each turn, and a geode
+        // robot can be built in the same turn if affordable
+        let mut free = *self;
+
         for _ in 0..self.remaining {
-            h += r;
-            r += 1;
+            let prev_robots = free.robots;
+            if let Some(next) = free.afford(blueprint.geode_cost) {
+                free = next;
+                free.robots[GEODE] += 1;
+            }
+            free.robots[ORE] += 1;
+            free.robots[OBSIDIAN] += 1;
+
+            #[allow(clippy::needless_range_loop)]
+            for i in 0..4 {
+                free.resources[i] += prev_robots[i];
+            }
         }
 
-        -h
+        self.resources[GEODE] - free.resources[GEODE]
     }
 
     fn done(&self) -> bool {
@@ -179,7 +190,7 @@ fn part_one(blueprints: &[Blueprint]) -> i32 {
             let (_, cost) = astar(
                 &State::new(24),
                 |state| state.moves(b),
-                |state| state.heuristic(),
+                |state| state.heuristic(b),
                 |state| state.done(),
             )
             .unwrap();
@@ -197,7 +208,7 @@ fn part_two(blueprints: &[Blueprint]) -> i32 {
             let (_, cost) = astar(
                 &State::new(32),
                 |state| state.moves(b),
-                |state| state.heuristic(),
+                |state| state.heuristic(b),
                 |state| state.done(),
             )
             .unwrap();
