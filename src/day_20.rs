@@ -113,7 +113,32 @@ mod tests {
 
     #[test]
     fn example_part_two_one_round() {
-        todo!()
+        let sequence = parse(INPUT);
+        let mut indices: Vec<_> = (0..sequence.len()).map(|i| i as isize).collect();
+        let mut multiplied = sequence.to_vec();
+        for n in &mut multiplied {
+            *n *= DECRYPTION_KEY;
+        }
+
+        mix(&multiplied, &mut indices);
+        const AFTER_ONE_ROUND: &[isize] = &[
+            0,
+            -2434767459,
+            3246356612,
+            -1623178306,
+            2434767459,
+            1623178306,
+            811589153,
+        ];
+
+        let mut shuffled = shuffle(&multiplied, &indices);
+        let z = shuffled
+            .iter()
+            .position(|n| *n == AFTER_ONE_ROUND[0])
+            .unwrap();
+        shuffled.rotate_left(z);
+
+        assert_eq!(shuffled, AFTER_ONE_ROUND);
     }
 
     #[test]
