@@ -121,7 +121,7 @@ impl State {
         }
     }
 
-    fn moves<'a>(&'a self, blueprint: &'a Blueprint) -> Vec<(Self, i32)> {
+    fn moves(&self, blueprint: &Blueprint) -> Vec<(Self, i32)> {
         let prev_robots = self.robots;
         let mut nexts = vec![*self];
 
@@ -156,8 +156,8 @@ impl State {
     }
 
     fn heuristic(&self, blueprint: &Blueprint) -> i32 {
-        // assume a ore robot and a obsidian robot can be built for free each turn, and a geode
-        // robot can be built in the same turn if affordable
+        // assume an ore robot and an obsidian robot can be built for free each minute, and a geode
+        // robot can be built in the same minute if affordable
         let mut free = *self;
 
         for _ in 0..self.remaining {
@@ -179,6 +179,7 @@ impl State {
     }
 
     fn done(&self) -> bool {
+        debug_assert!(self.remaining >= 0);
         self.remaining == 0
     }
 }
