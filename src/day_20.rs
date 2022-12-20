@@ -11,7 +11,7 @@ fn shift(i: isize, len: usize) -> isize {
     if i <= 0 {
         // +0 => +0
         // -1 => +5
-        // -2 => +4
+        // -5 => +1
         // -6 => +0
         i.rem_euclid((len - 1) as isize)
     } else {
@@ -30,19 +30,13 @@ fn mix(sequence: &[isize], indices: &mut [isize]) {
         for j in indices.iter_mut() {
             if *j < curr && *j < next {
                 // not affected
-            }
-
-            if *j < curr && *j >= next {
-                // n moved to its left
+            } else if *j < curr && *j >= next {
+                // n moved from its right to left
                 *j = shift(*j + 1, sequence.len());
-            }
-
-            if *j > curr && *j <= next {
-                // n moved to its right
+            } else if *j > curr && *j <= next {
+                // n moved from its left to right
                 *j = shift(*j - 1, sequence.len());
-            }
-
-            if *j > curr && *j > next {
+            } else if *j > curr && *j > next {
                 // not affected
             }
         }
@@ -73,8 +67,7 @@ fn coordinates(shuffled: &[isize]) -> isize {
 fn part_one(sequence: &[isize]) -> isize {
     let mut indices: Vec<_> = (0..sequence.len()).map(|i| i as isize).collect();
     mix(sequence, &mut indices);
-    let shuffled = shuffle(sequence, &indices);
-    coordinates(&shuffled)
+    coordinates(&shuffle(sequence, &indices))
 }
 
 const DECRYPTION_KEY: isize = 811589153;
