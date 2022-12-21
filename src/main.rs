@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         advent::day_18::solution,
         advent::day_19::solution,
         advent::day_20::solution,
-        // advent::day_21::solution,
+        advent::day_21::solution,
         // advent::day_22::solution,
         // advent::day_23::solution,
         // advent::day_24::solution,
