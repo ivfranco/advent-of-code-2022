@@ -58,7 +58,7 @@ fn coordinates(shuffled: &[isize]) -> isize {
     [1000, 2000, 3000]
         .into_iter()
         .map(|d| {
-            let after_idx = (z + d).rem_euclid(shuffled.len());
+            let after_idx = (z + d) % shuffled.len();
             shuffled[after_idx]
         })
         .sum()

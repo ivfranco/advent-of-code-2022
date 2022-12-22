@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use nom::{
     branch::alt,
@@ -48,7 +48,7 @@ impl BinOp {
             Add => result - lhs,
             Sub => lhs - result,
             Mul => result / lhs,
-            // could be problematic because of reminder
+            // could be problematic because of remainder
             Div => lhs / result,
         }
     }
@@ -154,8 +154,8 @@ enum Value {
 enum Nested {
     Expr {
         op: BinOp,
-        lhs: Box<Nested>,
-        rhs: Box<Nested>,
+        lhs: Rc<Nested>,
+        rhs: Rc<Nested>,
     },
     Value(Value),
 }
@@ -214,18 +214,18 @@ fn hypothesis(nested: &Nested) -> bool {
 
 fn part_two(yells: &[Yell]) -> i64 {
     let deps: HashMap<&str, Job> = yells.iter().map(|y| (y.monkey, y.job)).collect();
-    let mut values: HashMap<&str, Nested> = HashMap::new();
+    let mut values: HashMap<&str, Rc<Nested>> = HashMap::new();
 
     for monkey in topsort(&deps) {
         let v = match &deps[monkey] {
-            Job::Expr(expr) => match (&values[expr.lhs], &values[expr.rhs]) {
+            Job::Expr(expr) => match (&*values[expr.lhs], &*values[expr.rhs]) {
                 (Nested::Value(Value::Number(lhs)), Nested::Value(Value::Number(rhs))) => {
                     Nested::Value(Value::Number(expr.op.apply(*lhs, *rhs)))
                 }
-                (lhs, rhs) => Nested::Expr {
+                _ => Nested::Expr {
                     op: expr.op,
-                    lhs: Box::new(lhs.clone()),
-                    rhs: Box::new(rhs.clone()),
+                    lhs: Rc::clone(&values[expr.lhs]),
+                    rhs: Rc::clone(&values[expr.rhs]),
                 },
             },
             Job::Number(n) => {
@@ -237,7 +237,7 @@ fn part_two(yells: &[Yell]) -> i64 {
             }
         };
 
-        values.insert(monkey, v);
+        values.insert(monkey, Rc::new(v));
     }
 
     assert!(hypothesis(&values["root"]));
