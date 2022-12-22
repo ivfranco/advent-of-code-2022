@@ -111,7 +111,7 @@ fn p_yell(input: &str) -> IResult<&str, Yell> {
     Ok((input, Yell { monkey, job }))
 }
 
-fn topsort<'a>(deps: &'a HashMap<&str, Job>) -> Vec<&'a str> {
+fn toposort<'a>(deps: &'a HashMap<&str, Job>) -> Vec<&'a str> {
     let mut sorted = topological_sort(&["root"], |monkey| {
         let mut successors = vec![];
         if let Job::Expr(expr) = deps[monkey] {
@@ -127,7 +127,7 @@ fn topsort<'a>(deps: &'a HashMap<&str, Job>) -> Vec<&'a str> {
 fn part_one(yells: &[Yell]) -> i64 {
     let deps: HashMap<&str, Job> = yells.iter().map(|y| (y.monkey, y.job)).collect();
     let mut values: HashMap<&str, i64> = HashMap::new();
-    let sorted = topsort(&deps);
+    let sorted = toposort(&deps);
 
     for monkey in sorted {
         let v = match deps[monkey] {
@@ -196,15 +196,16 @@ impl Nested {
 }
 
 /// On every level of the final nested expression of monkey "root", either lhs or rhs can be reduced
-/// to a value.
+/// to a number.
 fn hypothesis(nested: &Nested) -> bool {
     let mut curr = nested;
 
     while let Nested::Expr { lhs, rhs, .. } = curr {
         match (lhs.as_ref(), rhs.as_ref()) {
-            (Nested::Value(..), expr @ Nested::Expr { .. })
-            | (expr @ Nested::Expr { .. }, Nested::Value(..)) => curr = expr,
-            (Nested::Value(..), Nested::Value(..)) => return true,
+            (Nested::Value(Value::Number(..)), expr @ Nested::Expr { .. })
+            | (expr @ Nested::Expr { .. }, Nested::Value(Value::Number(..))) => curr = expr,
+            (Nested::Value(Value::Number(..)), Nested::Value(..))
+            | (Nested::Value(..), Nested::Value(Value::Number(..))) => return true,
             _ => return false,
         }
     }
@@ -216,7 +217,7 @@ fn part_two(yells: &[Yell]) -> i64 {
     let deps: HashMap<&str, Job> = yells.iter().map(|y| (y.monkey, y.job)).collect();
     let mut values: HashMap<&str, Rc<Nested>> = HashMap::new();
 
-    for monkey in topsort(&deps) {
+    for monkey in toposort(&deps) {
         let v = match &deps[monkey] {
             Job::Expr(expr) => match (&*values[expr.lhs], &*values[expr.rhs]) {
                 (Nested::Value(Value::Number(lhs)), Nested::Value(Value::Number(rhs))) => {
