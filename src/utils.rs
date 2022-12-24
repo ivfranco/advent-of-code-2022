@@ -4,6 +4,7 @@ pub const UP: Coord = Coord { x: 0, y: -1 };
 pub const DOWN: Coord = Coord { x: 0, y: 1 };
 pub const LEFT: Coord = Coord { x: -1, y: 0 };
 pub const RIGHT: Coord = Coord { x: 1, y: 0 };
+pub const STAY: Coord = Coord { x: 0, y: 0 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Coord {

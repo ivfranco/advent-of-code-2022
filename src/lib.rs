@@ -14,6 +14,7 @@ pub mod day_20;
 pub mod day_21;
 pub mod day_22;
 pub mod day_23;
+pub mod day_24;
 pub mod day_3;
 pub mod day_4;
 pub mod day_5;
@@ -22,7 +23,6 @@ pub mod day_7;
 pub mod day_8;
 pub mod day_9;
 pub mod utils;
-// pub mod day_24;
 // pub mod day_25;
 
 use std::error::Error;
