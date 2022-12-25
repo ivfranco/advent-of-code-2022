@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         advent::day_22::solution,
         advent::day_23::solution,
         advent::day_24::solution,
-        // advent::day_25::solution,
+        advent::day_25::solution,
     ];
 
     let mut args = env::args();
